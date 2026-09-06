@@ -45,3 +45,23 @@ export async function loadBootstrap(signal?: AbortSignal): Promise<BootstrapData
   const payload = (await response.json()) as IntegrationResponse<BootstrapData>;
   return payload.ok && payload.data ? payload.data : null;
 }
+
+export async function createLaunch(input: {
+  participantId: string;
+  productId: string;
+  quantity: number;
+  client?: string;
+  notes?: string;
+}): Promise<BootstrapData> {
+  const response = await fetch('/api/integration', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'createLaunch', ...input }),
+    cache: 'no-store',
+  });
+  const payload = (await response.json()) as IntegrationResponse<BootstrapData>;
+  if (!response.ok || !payload.ok || !payload.data) {
+    throw new Error(payload.error?.message || 'Não foi possível persistir a inscrição.');
+  }
+  return payload.data;
+}

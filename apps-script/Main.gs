@@ -16,8 +16,11 @@ function doPost(e) {
   if (!isAuthorized_(body.token, action)) return json_(fail_('UNAUTHORIZED', 'Token de integração inválido.'));
   try {
     if (action === 'bootstrap') return json_(ok_(bootstrap_()));
+    if (action === 'createLaunch') return json_(ok_(createLaunch_(body)));
     return json_(ok_(bootstrap_().published));
   } catch (error) {
-    return json_(fail_('READ_FAILED', error.message));
+    var message = error && error.message ? error.message : String(error);
+    var parts = message.split(':');
+    return json_(fail_(parts.length > 1 ? parts[0] : 'REQUEST_FAILED', parts.slice(1).join(':').trim() || message));
   }
 }

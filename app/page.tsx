@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { loadBootstrap } from '@/lib/integration';
+import { createLaunch, loadBootstrap } from '@/lib/integration';
 
 declare global {
   interface Document {
@@ -24,7 +24,7 @@ declare global {
 }
 
 type Person = {
-  name: string; team: string; initials: string; registrations: number; progress: number;
+  id?: string; name: string; team: string; initials: string; registrations: number; progress: number;
 };
 
 const initialRanking: Person[] = [
@@ -64,7 +64,7 @@ export default function Home() {
   const [publishedRanking, setPublishedRanking] = useState(initialRanking);
   const [participant, setParticipant] = useState('Jaqueline');
   const [product, setProduct] = useState('CONBROP');
-  const [products, setProducts] = useState(['CONBROP', 'Formação em Licitações', 'Pregão Eletrônico', 'Treinamento In Company']);
+  const [products, setProducts] = useState<Array<{ id?: string; name: string }>>([{ name: 'CONBROP' }, { name: 'Formação em Licitações' }, { name: 'Pregão Eletrônico' }, { name: 'Treinamento In Company' }]);
   const [quantity, setQuantity] = useState(1);
   const [lastPublished, setLastPublished] = useState('hoje, 10:42');
   const [cancellationStatus, setCancellationStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
@@ -79,9 +79,27 @@ export default function Home() {
     if (scoreboardWindow) scoreboardWindow.opener = null;
   };
 
-  const registerMovement = (name = participant, amount = quantity, _item = product) => {
+  const registerMovement = async (name = participant, amount = quantity, _item = product) => {
     const safeQuantity = Number(amount);
     if (!name || !Number.isInteger(safeQuantity) || safeQuantity < 1) throw new Error('Informe uma quantidade válida.');
+    const selectedPerson = ranking.find((person) => person.name === name);
+    const selectedProduct = products.find((item) => item.name === _item);
+    if (integrationMode === 'live') {
+      if (!selectedPerson?.id || !selectedProduct?.id) throw new Error('Participante ou produto sem identificador na planilha.');
+      const bootstrap = await createLaunch({ participantId: selectedPerson.id, productId: selectedProduct.id, quantity: safeQuantity });
+      const liveRanking = bootstrap.participants.map((person) => ({
+        id: person.id,
+        name: person.name,
+        team: person.team || 'Sem equipe',
+        initials: person.initials || person.name.slice(0, 2).toUpperCase(),
+        registrations: person.registrations,
+        progress: person.progress ?? Math.min(100, person.registrations * 5),
+      }));
+      if (liveRanking.length) setRanking(liveRanking);
+      setPending(bootstrap.pendingCount);
+      setRegisterOpen(false);
+      return { status: 'pending_publication', participant: name, quantity: safeQuantity, persisted: true };
+    }
     setRanking((current) => current
       .map((person) => person.name === name ? { ...person, registrations: person.registrations + safeQuantity, progress: Math.min(100, person.progress + safeQuantity * 5) } : person)
       .sort((a, b) => b.registrations - a.registrations));
@@ -133,6 +151,7 @@ export default function Home() {
       const liveRanking = bootstrap.participants
         .filter((person) => person.name)
         .map((person) => ({
+          id: person.id,
           name: person.name,
           team: person.team || 'Sem equipe',
           initials: person.initials || person.name.slice(0, 2).toUpperCase(),
@@ -142,10 +161,10 @@ export default function Home() {
       const published = bootstrap.published;
       if (liveRanking.length) setRanking(liveRanking);
       if (bootstrap.products.length) {
-        const liveProducts = bootstrap.products.map((item) => item.name.replace(/^\[DEMO\]\s*/i, '')).filter(Boolean);
+        const liveProducts = bootstrap.products.map((item) => ({ ...item, name: item.name.replace(/^\[DEMO\]\s*/i, '') })).filter((item) => item.name);
         if (liveProducts.length) {
           setProducts(liveProducts);
-          setProduct((current) => liveProducts.includes(current) ? current : liveProducts[0]);
+          setProduct((current) => liveProducts.some((item) => item.name === current) ? current : liveProducts[0].name);
         }
       }
       if (published?.ranking?.length) setPublishedRanking(published.ranking.map((person) => ({
@@ -313,8 +332,8 @@ function ApprovalsView({ status, onApprove, onReject, onGoToDashboard }: { statu
   return <section className="approval-layout"><article className={`panel-card approval-card ${status !== 'pending' ? `resolved ${status}` : ''}`}><div className="approval-top"><span className="avatar large">EV</span><div><p className="eyebrow">Cancelamento solicitado hoje, 09:48</p><h2>Eveline · Treinamento In Company</h2></div>{status !== 'pending' && <span className={`approval-status ${status}`}>{status === 'approved' ? <><CheckCircle2 size={15}/> Aprovado</> : <><XCircle size={15}/> Rejeitado</>}</span>}</div><div className="approval-details"><div><span>Lançamento original</span><strong>2 inscrições</strong></div><div><span>Motivo</span><strong>Cliente desistiu antes da confirmação financeira.</strong></div></div>{status === 'pending' ? <><p className="approval-note">Aprovar criará uma reversão. O resultado ficará pendente até a próxima publicação do placar.</p><div className="approval-actions"><Button variant="outline" onClick={onReject}><XCircle size={16}/> Rejeitar</Button><Button className="primary-action" onClick={onApprove}><CheckCircle2 size={16}/> Aprovar cancelamento</Button></div></> : <div className={`approval-result ${status}`}><div>{status === 'approved' ? <CheckCircle2 size={21}/> : <XCircle size={21}/>}<p><strong>{status === 'approved' ? 'Cancelamento aprovado e reversão criada.' : 'Cancelamento rejeitado.'}</strong><span>{status === 'approved' ? 'As 2 inscrições foram retiradas da gestão e aguardam a próxima publicação.' : 'O lançamento original permanece ativo e o placar não foi alterado.'}</span></p></div>{status === 'approved' && <Button variant="outline" onClick={onGoToDashboard}>Ver alterações pendentes <ArrowUpRight size={16}/></Button>}</div>}</article></section>;
 }
 
-function RegistrationDialog({ open, onOpenChange, participants, products, participant, setParticipant, product, setProduct, quantity, setQuantity, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; participants: Person[]; products: string[]; participant: string; setParticipant: (value: string) => void; product: string; setProduct: (value: string) => void; quantity: number; setQuantity: (value: number) => void; onSave: () => void }) {
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="registration-dialog"><DialogHeader><DialogTitle>Registrar nova inscrição</DialogTitle><DialogDescription>O lançamento ficará pendente até a próxima publicação do placar.</DialogDescription></DialogHeader><div className="form-grid"><div className="field"><Label htmlFor="participant">Participante</Label><select id="participant" value={participant} onChange={(event) => setParticipant(event.target.value)}>{participants.map((person) => <option key={person.name}>{person.name}</option>)}</select></div><div className="field"><Label htmlFor="product">Evento ou curso</Label><select id="product" value={product} onChange={(event) => setProduct(event.target.value)}>{products.map((item) => <option key={item}>{item}</option>)}</select></div><div className="field"><Label htmlFor="quantity">Quantidade</Label><Input id="quantity" type="number" min={1} value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value)))} /></div><div className="field"><Label htmlFor="client">Órgão ou cliente</Label><Input id="client" placeholder="Opcional" /></div><div className="field full"><Label htmlFor="notes">Observação</Label><Input id="notes" placeholder="Informação complementar" /></div></div><div className="points-preview"><span>Pontuação calculada</span><strong>{quantity * 10} pontos</strong></div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" onClick={onSave}><Check size={17}/> Confirmar inscrição</Button></DialogFooter></DialogContent></Dialog>;
+function RegistrationDialog({ open, onOpenChange, participants, products, participant, setParticipant, product, setProduct, quantity, setQuantity, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; participants: Person[]; products: Array<{ id?: string; name: string }>; participant: string; setParticipant: (value: string) => void; product: string; setProduct: (value: string) => void; quantity: number; setQuantity: (value: number) => void; onSave: () => void | Promise<unknown> }) {
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="registration-dialog"><DialogHeader><DialogTitle>Registrar nova inscrição</DialogTitle><DialogDescription>O lançamento ficará pendente até a próxima publicação do placar.</DialogDescription></DialogHeader><div className="form-grid"><div className="field"><Label htmlFor="participant">Participante</Label><select id="participant" value={participant} onChange={(event) => setParticipant(event.target.value)}>{participants.map((person) => <option key={person.name}>{person.name}</option>)}</select></div><div className="field"><Label htmlFor="product">Evento ou curso</Label><select id="product" value={product} onChange={(event) => setProduct(event.target.value)}>{products.map((item) => <option key={item.name}>{item.name}</option>)}</select></div><div className="field"><Label htmlFor="quantity">Quantidade</Label><Input id="quantity" type="number" min={1} value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value)))} /></div><div className="field"><Label htmlFor="client">Órgão ou cliente</Label><Input id="client" placeholder="Opcional" /></div><div className="field full"><Label htmlFor="notes">Observação</Label><Input id="notes" placeholder="Informação complementar" /></div></div><div className="points-preview"><span>Pontuação calculada</span><strong>{quantity * 10} pontos</strong></div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" onClick={() => { void Promise.resolve(onSave()).catch((error: unknown) => window.alert(error instanceof Error ? error.message : 'Não foi possível salvar a inscrição.')); }}><Check size={17}/> Confirmar inscrição</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function PublicationDialog({ open, onOpenChange, pending, total, publishedTotal, changedPeople, onPublish }: { open: boolean; onOpenChange: (open: boolean) => void; pending: number; total: number; publishedTotal: number; changedPeople: Person[]; onPublish: () => void }) {

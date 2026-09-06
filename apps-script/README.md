@@ -7,4 +7,4 @@ Este diretório contém a primeira fatia do backend Apps Script do painel. Ele l
 3. Publique como aplicativo da Web, executando como a pessoa que publica. Restrinja o acesso conforme a política da organização; a autorização administrativa é feita pelo segredo recebido no corpo da requisição.
 4. Configure no ambiente do Worker do painel `APPS_SCRIPT_URL` com a URL `/exec` da implantação e `APPS_SCRIPT_SHARED_SECRET` com o mesmo valor da propriedade do script.
 
-As operações disponíveis nesta etapa são `bootstrap` (leitura administrativa sanitizada) e `publishedScoreboard` (somente a última versão publicada). Sem essas variáveis no ambiente, o painel mantém os dados de demonstração para não interromper o protótipo.
+As operações disponíveis nesta etapa são `bootstrap` (leitura administrativa sanitizada), `publishedScoreboard` (somente a última versão publicada) e `createLaunch` (grava uma inscrição pendente em `LANCAMENTOS`, com auditoria e bloqueio concorrente). `createLaunch` exige uma gincana com `STATUS=ATIVA`. Sem essas variáveis no ambiente, o painel mantém os dados de demonstração para não interromper o protótipo.
