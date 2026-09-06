@@ -65,9 +65,10 @@ export default function Home() {
   const [product, setProduct] = useState('CONBROP');
   const [quantity, setQuantity] = useState(1);
   const [lastPublished, setLastPublished] = useState('hoje, 10:42');
+  const [cancellationStatus, setCancellationStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
 
   const total = useMemo(() => ranking.reduce((sum, person) => sum + person.registrations, 0), [ranking]);
-  const changedPeople = useMemo(() => ranking.filter((person, index) => person.registrations !== publishedRanking[index]?.registrations), [ranking, publishedRanking]);
+  const changedPeople = useMemo(() => ranking.filter((person) => person.registrations !== publishedRanking.find((published) => published.name === person.name)?.registrations), [ranking, publishedRanking]);
 
   const registerMovement = (name = participant, amount = quantity, item = product) => {
     const safeQuantity = Number(amount);
@@ -88,6 +89,20 @@ export default function Home() {
     setLastPublished('agora');
     setPreviewOpen(false);
     return { status: 'published', version: version + 1, total };
+  };
+
+  const approveCancellation = () => {
+    if (cancellationStatus !== 'pending') return;
+    setRanking((current) => current
+      .map((person) => person.name === 'Eveline' ? { ...person, registrations: Math.max(0, person.registrations - 2), progress: Math.max(0, person.progress - 13) } : person)
+      .sort((a, b) => b.registrations - a.registrations));
+    setCancellationStatus('approved');
+    setPending((current) => current + 1);
+  };
+
+  const rejectCancellation = () => {
+    if (cancellationStatus !== 'pending') return;
+    setCancellationStatus('rejected');
   };
 
   useEffect(() => {
@@ -131,14 +146,14 @@ export default function Home() {
       <main className="admin-shell min-h-screen text-slate-950">
         <aside className="sidebar-panel">
           <div className="brand-block">
-            <div className="brand-placeholder" aria-label="Espaço reservado para a logo oficial">LOGO</div>
-            <div><strong>Capacity</strong><span>Placar comercial</span></div>
+            <div className="brand-logo-wrap"><img src="/capacity-logo.png" alt="Capacity" /></div>
+            <span>Placar comercial</span>
           </div>
 
           <nav aria-label="Navegação principal" className="nav-list">
             {navItems.map((item) => {
               const Icon = item.icon;
-              return <button key={item.id} onClick={() => setPage(item.id)} className={page === item.id ? 'nav-item active' : 'nav-item'}><Icon size={19} strokeWidth={1.8} />{item.label}{item.id === 'approvals' && <span className="nav-badge">1</span>}</button>;
+              return <button key={item.id} onClick={() => setPage(item.id)} className={page === item.id ? 'nav-item active' : 'nav-item'}><Icon size={19} strokeWidth={1.8} />{item.label}{item.id === 'approvals' && cancellationStatus === 'pending' && <span className="nav-badge">1</span>}</button>;
             })}
           </nav>
 
@@ -159,10 +174,10 @@ export default function Home() {
 
           <div className="content-wrap">
             {page === 'dashboard' && <Dashboard ranking={ranking} pending={pending} total={total} version={version} lastPublished={lastPublished} onPreview={() => setPreviewOpen(true)} />}
-            {page === 'history' && <HistoryView />}
+            {page === 'history' && <HistoryView cancellationStatus={cancellationStatus} />}
             {page === 'participants' && <ParticipantsView ranking={ranking} />}
             {page === 'games' && <GamesView />}
-            {page === 'approvals' && <ApprovalsView />}
+            {page === 'approvals' && <ApprovalsView status={cancellationStatus} onApprove={approveCancellation} onReject={rejectCancellation} onGoToDashboard={() => setPage('dashboard')} />}
           </div>
         </section>
       </main>
@@ -213,9 +228,9 @@ function Activity() {
   return <><div className="activity-item"><span className="activity-dot orange" /><p><strong>Jaqueline</strong> confirmou 2 inscrições para o CONBROP.<small>há 18 min</small></p></div><div className="activity-item"><span className="activity-dot blue" /><p><strong>Alana</strong> alcançou 80% da meta individual.<small>há 1 h</small></p></div><div className="activity-item"><span className="activity-dot gold" /><p><strong>Danyelle</strong> avançou para o pódio.<small>ontem, 17:24</small></p></div></>;
 }
 
-function HistoryView() {
+function HistoryView({ cancellationStatus }: { cancellationStatus: 'pending' | 'approved' | 'rejected' }) {
   const rows = [
-    ['Hoje, 10:37', 'Jaqueline', 'CONBROP', '+2', 'Ativo'], ['Hoje, 09:12', 'Alana', 'Formação em Licitações', '+1', 'Ativo'], ['Ontem, 17:24', 'Danyelle', 'CONBROP', '+3', 'Ativo'], ['Ontem, 14:03', 'Priscila', 'Pregão Eletrônico', '+1', 'Ativo'], ['04 set, 16:18', 'Eveline', 'Treinamento In Company', '+2', 'Cancelamento pendente'],
+    ['Hoje, 10:37', 'Jaqueline', 'CONBROP', '+2', 'Ativo'], ['Hoje, 09:12', 'Alana', 'Formação em Licitações', '+1', 'Ativo'], ['Ontem, 17:24', 'Danyelle', 'CONBROP', '+3', 'Ativo'], ['Ontem, 14:03', 'Priscila', 'Pregão Eletrônico', '+1', 'Ativo'], ['04 set, 16:18', 'Eveline', 'Treinamento In Company', '+2', cancellationStatus === 'approved' ? 'Revertido' : cancellationStatus === 'rejected' ? 'Ativo' : 'Cancelamento pendente'],
   ];
   return <section className="list-page panel-card"><div className="list-page-head"><div><p className="eyebrow">Histórico auditável</p><h2>Movimentações recentes</h2></div><Input aria-label="Pesquisar lançamentos" placeholder="Pesquisar participante ou produto" className="search-input" /></div><div className="data-table"><div className="data-row data-head"><span>Data</span><span>Participante</span><span>Produto</span><span>Inscrições</span><span>Status</span></div>{rows.map((row) => <div className="data-row" key={row.join('-')}>{row.map((cell, index) => <span key={cell} className={index === 4 ? 'status-cell' : ''}>{cell}</span>)}</div>)}</div></section>;
 }
@@ -228,8 +243,8 @@ function GamesView() {
   return <section className="games-grid"><article className="panel-card game-card active-game"><span className="game-status"><Radio size={14}/> Ativa</span><p className="eyebrow">06 a 24 de setembro</p><h2>Gincana Rumo ao Topo</h2><p>Ranking geral por inscrições · 9 participantes · meta de 120</p><div className="game-card-footer"><Progress value={61.7}/><strong>61,7%</strong></div></article><article className="panel-card game-card draft-game"><span className="game-status">Rascunho</span><p className="eyebrow">Próxima temporada</p><h2>Campanha de Outubro</h2><p>Defina participantes, produtos e regras antes de ativar.</p><Button variant="outline">Continuar configuração</Button></article></section>;
 }
 
-function ApprovalsView() {
-  return <section className="approval-layout"><article className="panel-card approval-card"><div className="approval-top"><span className="avatar large">EV</span><div><p className="eyebrow">Cancelamento solicitado hoje, 09:48</p><h2>Eveline · Treinamento In Company</h2></div></div><div className="approval-details"><div><span>Lançamento original</span><strong>2 inscrições</strong></div><div><span>Motivo</span><strong>Cliente desistiu antes da confirmação financeira.</strong></div></div><p className="approval-note">Aprovar criará uma reversão. O resultado ficará pendente até a próxima publicação do placar.</p><div className="approval-actions"><Button variant="outline"><XCircle size={16}/> Rejeitar</Button><Button className="primary-action"><CheckCircle2 size={16}/> Aprovar cancelamento</Button></div></article></section>;
+function ApprovalsView({ status, onApprove, onReject, onGoToDashboard }: { status: 'pending' | 'approved' | 'rejected'; onApprove: () => void; onReject: () => void; onGoToDashboard: () => void }) {
+  return <section className="approval-layout"><article className={`panel-card approval-card ${status !== 'pending' ? `resolved ${status}` : ''}`}><div className="approval-top"><span className="avatar large">EV</span><div><p className="eyebrow">Cancelamento solicitado hoje, 09:48</p><h2>Eveline · Treinamento In Company</h2></div>{status !== 'pending' && <span className={`approval-status ${status}`}>{status === 'approved' ? <><CheckCircle2 size={15}/> Aprovado</> : <><XCircle size={15}/> Rejeitado</>}</span>}</div><div className="approval-details"><div><span>Lançamento original</span><strong>2 inscrições</strong></div><div><span>Motivo</span><strong>Cliente desistiu antes da confirmação financeira.</strong></div></div>{status === 'pending' ? <><p className="approval-note">Aprovar criará uma reversão. O resultado ficará pendente até a próxima publicação do placar.</p><div className="approval-actions"><Button variant="outline" onClick={onReject}><XCircle size={16}/> Rejeitar</Button><Button className="primary-action" onClick={onApprove}><CheckCircle2 size={16}/> Aprovar cancelamento</Button></div></> : <div className={`approval-result ${status}`}><div>{status === 'approved' ? <CheckCircle2 size={21}/> : <XCircle size={21}/>}<p><strong>{status === 'approved' ? 'Cancelamento aprovado e reversão criada.' : 'Cancelamento rejeitado.'}</strong><span>{status === 'approved' ? 'As 2 inscrições foram retiradas da gestão e aguardam a próxima publicação.' : 'O lançamento original permanece ativo e o placar não foi alterado.'}</span></p></div>{status === 'approved' && <Button variant="outline" onClick={onGoToDashboard}>Ver alterações pendentes <ArrowUpRight size={16}/></Button>}</div>}</article></section>;
 }
 
 function RegistrationDialog({ open, onOpenChange, participant, setParticipant, product, setProduct, quantity, setQuantity, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; participant: string; setParticipant: (value: string) => void; product: string; setProduct: (value: string) => void; quantity: number; setQuantity: (value: number) => void; onSave: () => void }) {
@@ -242,5 +257,5 @@ function PublicationDialog({ open, onOpenChange, pending, total, publishedTotal,
 
 function Scoreboard({ ranking, total, version, lastPublished, onBack }: { ranking: Person[]; total: number; version: number; lastPublished: string; onBack: () => void }) {
   const podium = [ranking[1], ranking[0], ranking[2]];
-  return <main className="scoreboard-shell min-h-screen text-white"><header className="scoreboard-header"><div><span className="score-brand">Capacity Treinamentos</span><h1>Gincana Rumo ao Topo</h1></div><div className="scoreboard-meta"><span>Critério: inscrições confirmadas</span><strong>18 dias restantes</strong><button onClick={onBack}>Voltar à gestão</button></div></header><section className="scoreboard-content"><div className="podium">{podium.map((person, index) => { const place = [2, 1, 3][index]; return <article className={`podium-card place-${place}`} key={person.name}><span className="podium-place">{place}º</span><span className="podium-avatar">{person.initials}</span><h2>{person.name}</h2><p>{person.team}</p><strong>{person.registrations}<small> inscrições</small></strong><Progress value={person.progress} /><span>{person.progress}% da meta</span></article>; })}</div><aside className="score-summary"><p>Juntas, já conquistamos</p><strong>{total}</strong><span>inscrições confirmadas</span><Progress value={(total / 120) * 100} /><small>{((total / 120) * 100).toFixed(1).replace('.', ',')}% da meta coletiva</small></aside></section><footer className="score-ticker"><span className="live-dot" /><strong>Última conquista</strong><p>{ranking[0].name} está na liderança com {ranking[0].registrations} inscrições</p><span>Versão {version} · {lastPublished}</span></footer></main>;
+  return <main className="scoreboard-shell min-h-screen text-white"><header className="scoreboard-header"><div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity" /></div><div><span className="score-brand">Placar comercial</span><h1>Gincana Rumo ao Topo</h1></div></div><div className="scoreboard-meta"><span>Critério: inscrições confirmadas</span><strong>18 dias restantes</strong><button onClick={onBack}>Voltar à gestão</button></div></header><section className="scoreboard-content"><div className="podium">{podium.map((person, index) => { const place = [2, 1, 3][index]; return <article className={`podium-card place-${place}`} key={person.name}><span className="podium-place">{place}º</span><span className="podium-avatar">{person.initials}</span><h2>{person.name}</h2><p>{person.team}</p><strong>{person.registrations}<small> inscrições</small></strong><Progress value={person.progress} /><span>{person.progress}% da meta</span></article>; })}</div><aside className="score-summary"><p>Juntas, já conquistamos</p><strong>{total}</strong><span>inscrições confirmadas</span><Progress value={(total / 120) * 100} /><small>{((total / 120) * 100).toFixed(1).replace('.', ',')}% da meta coletiva</small></aside></section><footer className="score-ticker"><span className="live-dot" /><strong>Última conquista</strong><p>{ranking[0].name} está na liderança com {ranking[0].registrations} inscrições</p><span>Versão {version} · {lastPublished}</span></footer></main>;
 }
