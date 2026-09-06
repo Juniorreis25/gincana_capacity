@@ -21,16 +21,24 @@ function createLaunch_(input) {
     if (!game) throw new Error('NO_ACTIVE_GAME: Não há uma gincana ativa para receber lançamentos.');
 
     var participant = rows_('PARTICIPANTES').find(function (item) { return text_(item.ID) === participantId; });
-    if (!participant) throw new Error('PARTICIPANT_NOT_FOUND: Participante não encontrada.');
+    if (!participant || !isActive_(participant.ATIVO)) throw new Error('PARTICIPANT_NOT_FOUND: Participante não encontrada ou inativa.');
     var product = rows_('PRODUTOS').find(function (item) { return text_(item.ID) === productId; });
-    if (!product) throw new Error('PRODUCT_NOT_FOUND: Produto não encontrado.');
+    if (!product || !isActive_(product.ATIVO)) throw new Error('PRODUCT_NOT_FOUND: Produto não encontrado ou inativo.');
+    var participantLinks = rows_('GINCANA_PARTICIPANTES').filter(function (link) { return text_(link.GINCANA_ID) === text_(game.ID); });
+    if (participantLinks.length && !participantLinks.some(function (link) { return text_(link.PARTICIPANTE_ID) === participantId && isActive_(link.ATIVO); })) throw new Error('PARTICIPANT_NOT_ASSOCIATED: Participante não está associada à gincana ativa.');
+    var productLinks = rows_('GINCANA_PRODUTOS').filter(function (link) { return text_(link.GINCANA_ID) === text_(game.ID); });
+    if (productLinks.length && !productLinks.some(function (link) { return text_(link.PRODUTO_ID) === productId && isActive_(link.ATIVO); })) throw new Error('PRODUCT_NOT_ASSOCIATED: Produto não participa desta gincana.');
 
     var launches = rows_('LANCAMENTOS');
-    var duplicate = launches.some(function (launch) {
-      return text_(launch.GINCANA_ID) === text_(game.ID) && text_(launch.PARTICIPANTE_ID) === participantId && text_(launch.PRODUTO_ID) === productId && text_(launch.STATUS).toUpperCase() === 'ATIVO';
-    });
     var now = new Date();
+    var duplicate = launches.some(function (launch) {
+      if (text_(launch.GINCANA_ID) !== text_(game.ID) || text_(launch.PARTICIPANTE_ID) !== participantId || text_(launch.PRODUTO_ID) !== productId || number_(launch.INSCRICOES_DELTA) !== quantity || text_(launch.STATUS).toUpperCase() !== 'ATIVO') return false;
+      var created = launch.CRIADO_EM && Object.prototype.toString.call(launch.CRIADO_EM) === '[object Date]' ? launch.CRIADO_EM : null;
+      return created && Math.abs(now.getTime() - created.getTime()) <= 5 * 60 * 1000;
+    });
     var id = Utilities.getUuid();
+    var link = productLinks.find(function (item) { return text_(item.PRODUTO_ID) === productId; });
+    var pointsPerRegistration = link ? number_(link.PONTOS_POR_INSCRICAO) : number_(product.PONTOS_POR_UNIDADE);
     appendObject_('LANCAMENTOS', {
       ID: id,
       GINCANA_ID: text_(game.ID),
@@ -40,7 +48,7 @@ function createLaunch_(input) {
       STATUS: 'ATIVO',
       INSCRICOES_DELTA: quantity,
       VALOR_CENTAVOS_DELTA: 0,
-      PONTOS_DELTA: quantity,
+      PONTOS_DELTA: quantity * pointsPerRegistration,
       DATA_OCORRENCIA: now,
       ORGAO_CLIENTE: text_(input.client),
       OBSERVACAO: text_(input.notes),

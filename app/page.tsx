@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, ArrowUpRight, BarChart3, Check, CheckCircle2,
   Clock3, Eye, LayoutDashboard, ListChecks, Medal, Plus, Radio, RefreshCw,
@@ -13,7 +13,19 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { createLaunch, loadBootstrap } from '@/lib/integration';
+import {
+  approveCancellation as approveLiveCancellation,
+  createLaunch,
+  loadBootstrap,
+  loadPreview,
+  publishScoreboard,
+  rejectCancellation as rejectLiveCancellation,
+  requestCancellation as requestLiveCancellation,
+  type BootstrapData,
+  type LiveCancellation,
+  type LiveHistoryRow,
+  type PreviewData,
+} from '@/lib/integration';
 
 declare global {
   interface Document {
@@ -67,10 +79,14 @@ export default function Home() {
   const [products, setProducts] = useState<Array<{ id?: string; name: string }>>([{ name: 'CONBROP' }, { name: 'Formação em Licitações' }, { name: 'Pregão Eletrônico' }, { name: 'Treinamento In Company' }]);
   const [quantity, setQuantity] = useState(1);
   const [lastPublished, setLastPublished] = useState('hoje, 10:42');
-  const [cancellationStatus, setCancellationStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [integrationMode, setIntegrationMode] = useState<'demo' | 'loading' | 'live' | 'error'>('loading');
+  const [history, setHistory] = useState<LiveHistoryRow[]>([]);
+  const [cancellations, setCancellations] = useState<LiveCancellation[]>([]);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const total = useMemo(() => ranking.reduce((sum, person) => sum + person.registrations, 0), [ranking]);
+  const pendingCancellations = useMemo(() => cancellations.filter((item) => item.status === 'PENDENTE').length, [cancellations]);
   const changedPeople = useMemo(() => ranking.filter((person) => person.registrations !== publishedRanking.find((published) => published.name === person.name)?.registrations), [ranking, publishedRanking]);
 
   const openScoreboard = () => {
@@ -78,6 +94,39 @@ export default function Home() {
     const scoreboardWindow = window.open(scoreboardUrl, '_blank', 'noopener,noreferrer');
     if (scoreboardWindow) scoreboardWindow.opener = null;
   };
+
+  const applyBootstrap = useCallback((bootstrap: BootstrapData) => {
+    const liveRanking = bootstrap.participants.filter((person) => person.name).map((person) => ({
+      id: person.id,
+      name: person.name,
+      team: person.team || 'Sem equipe',
+      initials: person.initials || person.name.slice(0, 2).toUpperCase(),
+      registrations: person.registrations,
+      progress: person.progress ?? Math.min(100, person.registrations * 5),
+    }));
+    if (liveRanking.length) setRanking(liveRanking);
+    if (bootstrap.products.length) {
+      const liveProducts = bootstrap.products.map((item) => ({ ...item, name: item.name.replace(/^\[DEMO\]\s*/i, '') })).filter((item) => item.name);
+      if (liveProducts.length) {
+        setProducts(liveProducts);
+        setProduct((current) => liveProducts.some((item) => item.name === current) ? current : liveProducts[0].name);
+      }
+    }
+    const published = bootstrap.published;
+    if (published?.ranking?.length) setPublishedRanking(published.ranking.map((person) => ({ name: person.name, team: person.team || 'Sem equipe', initials: person.initials || person.name.slice(0, 2).toUpperCase(), registrations: person.registrations, progress: person.progress ?? Math.min(100, person.registrations * 5) })));
+    setHistory(bootstrap.history || []);
+    setCancellations(bootstrap.cancellations || []);
+    setPending(bootstrap.pendingCount);
+    if (published) { setPublishedTotal(published.total); setVersion(published.version); setLastPublished(published.publishedAt || 'ainda não publicada'); }
+    setIntegrationMode('live');
+  }, []);
+
+  const reloadIntegration = useCallback(async () => {
+    const bootstrap = await loadBootstrap();
+    if (!bootstrap) { setIntegrationMode('demo'); return null; }
+    applyBootstrap(bootstrap);
+    return bootstrap;
+  }, [applyBootstrap]);
 
   const registerMovement = async (name = participant, amount = quantity, _item = product) => {
     const safeQuantity = Number(amount);
@@ -87,16 +136,7 @@ export default function Home() {
     if (integrationMode === 'live') {
       if (!selectedPerson?.id || !selectedProduct?.id) throw new Error('Participante ou produto sem identificador na planilha.');
       const bootstrap = await createLaunch({ participantId: selectedPerson.id, productId: selectedProduct.id, quantity: safeQuantity });
-      const liveRanking = bootstrap.participants.map((person) => ({
-        id: person.id,
-        name: person.name,
-        team: person.team || 'Sem equipe',
-        initials: person.initials || person.name.slice(0, 2).toUpperCase(),
-        registrations: person.registrations,
-        progress: person.progress ?? Math.min(100, person.registrations * 5),
-      }));
-      if (liveRanking.length) setRanking(liveRanking);
-      setPending(bootstrap.pendingCount);
+      applyBootstrap(bootstrap);
       setRegisterOpen(false);
       return { status: 'pending_publication', participant: name, quantity: safeQuantity, persisted: true };
     }
@@ -108,28 +148,34 @@ export default function Home() {
     return { status: 'pending_publication', participant: name, quantity: safeQuantity };
   };
 
-  const publish = () => {
-    setPublishedRanking(ranking);
-    setPublishedTotal(total);
-    setPending(0);
-    setVersion((current) => current + 1);
-    setLastPublished('agora');
+  const openPreview = async () => {
+    setPreviewLoading(true);
+    try { setPreviewData(await loadPreview()); setPreviewOpen(true); }
+    finally { setPreviewLoading(false); }
+  };
+
+  const publish = async () => {
+    const result = await publishScoreboard();
+    applyBootstrap(result.bootstrap);
     setPreviewOpen(false);
-    return { status: 'published', version: version + 1, total };
+    setPreviewData(null);
+    return { status: 'published', version: result.version, total: result.bootstrap.published?.total || total };
   };
 
-  const approveCancellation = () => {
-    if (cancellationStatus !== 'pending') return;
-    setRanking((current) => current
-      .map((person) => person.name === 'Eveline' ? { ...person, registrations: Math.max(0, person.registrations - 2), progress: Math.max(0, person.progress - 13) } : person)
-      .sort((a, b) => b.registrations - a.registrations));
-    setCancellationStatus('approved');
-    setPending((current) => current + 1);
+  const requestCancellation = async (launchId: string) => {
+    const reason = window.prompt('Informe o motivo do cancelamento:');
+    if (!reason?.trim()) return;
+    applyBootstrap(await requestLiveCancellation({ launchId, reason: reason.trim() }));
   };
 
-  const rejectCancellation = () => {
-    if (cancellationStatus !== 'pending') return;
-    setCancellationStatus('rejected');
+  const approveCancellation = async (cancellationId: string) => {
+    applyBootstrap(await approveLiveCancellation(cancellationId));
+  };
+
+  const rejectCancellation = async (cancellationId: string) => {
+    const justification = window.prompt('Informe a justificativa da rejeição:');
+    if (!justification?.trim()) return;
+    applyBootstrap(await rejectLiveCancellation(cancellationId, justification.trim()));
   };
 
   useEffect(() => {
@@ -147,40 +193,7 @@ export default function Home() {
         setIntegrationMode('demo');
         return;
       }
-
-      const liveRanking = bootstrap.participants
-        .filter((person) => person.name)
-        .map((person) => ({
-          id: person.id,
-          name: person.name,
-          team: person.team || 'Sem equipe',
-          initials: person.initials || person.name.slice(0, 2).toUpperCase(),
-          registrations: person.registrations,
-          progress: person.progress ?? Math.min(100, person.registrations * 5),
-        }));
-      const published = bootstrap.published;
-      if (liveRanking.length) setRanking(liveRanking);
-      if (bootstrap.products.length) {
-        const liveProducts = bootstrap.products.map((item) => ({ ...item, name: item.name.replace(/^\[DEMO\]\s*/i, '') })).filter((item) => item.name);
-        if (liveProducts.length) {
-          setProducts(liveProducts);
-          setProduct((current) => liveProducts.some((item) => item.name === current) ? current : liveProducts[0].name);
-        }
-      }
-      if (published?.ranking?.length) setPublishedRanking(published.ranking.map((person) => ({
-        name: person.name,
-        team: person.team || 'Sem equipe',
-        initials: person.initials || person.name.slice(0, 2).toUpperCase(),
-        registrations: person.registrations,
-        progress: person.progress ?? Math.min(100, person.registrations * 5),
-      })));
-      setPending(bootstrap.pendingCount);
-      if (published) {
-        setPublishedTotal(published.total);
-        setVersion(published.version);
-        setLastPublished(published.publishedAt || 'ainda não publicada');
-      }
-      setIntegrationMode('live');
+      applyBootstrap(bootstrap);
     }).catch(() => {
       if (mounted) setIntegrationMode('error');
     });
@@ -188,7 +201,7 @@ export default function Home() {
       mounted = false;
       controller.abort();
     };
-  }, []);
+  }, [applyBootstrap]);
 
   useEffect(() => {
     const context = document.modelContext;
@@ -223,7 +236,7 @@ export default function Home() {
   }, []);
 
   if (view === 'scoreboard') {
-    return <Scoreboard ranking={publishedRanking} total={publishedTotal} version={version} lastPublished={lastPublished} onBack={() => setView('admin')} />;
+    return <Scoreboard ranking={publishedRanking} total={publishedTotal} version={version} lastPublished={lastPublished} onBack={() => setView('admin')} onReload={reloadIntegration} />;
   }
 
   return (
@@ -238,7 +251,7 @@ export default function Home() {
           <nav aria-label="Navegação principal" className="nav-list">
             {navItems.map((item) => {
               const Icon = item.icon;
-              return <button key={item.id} onClick={() => setPage(item.id)} className={page === item.id ? 'nav-item active' : 'nav-item'}><Icon size={19} strokeWidth={1.8} />{item.label}{item.id === 'approvals' && cancellationStatus === 'pending' && <span className="nav-badge">1</span>}</button>;
+              return <button key={item.id} onClick={() => setPage(item.id)} className={page === item.id ? 'nav-item active' : 'nav-item'}><Icon size={19} strokeWidth={1.8} />{item.label}{item.id === 'approvals' && pendingCancellations > 0 && <span className="nav-badge">{pendingCancellations}</span>}</button>;
             })}
           </nav>
 
@@ -258,27 +271,27 @@ export default function Home() {
           </header>
 
           <div className="content-wrap">
-            {page === 'dashboard' && <Dashboard ranking={ranking} pending={pending} total={total} version={version} lastPublished={lastPublished} onPreview={() => setPreviewOpen(true)} />}
-            {page === 'history' && <HistoryView cancellationStatus={cancellationStatus} />}
+            {page === 'dashboard' && <Dashboard ranking={ranking} pending={pending} pendingTotal={history.filter((row) => row.pendingPublication).reduce((sum, row) => sum + row.quantity, 0)} pendingParticipants={new Set(history.filter((row) => row.pendingPublication).map((row) => row.participantId)).size} total={total} version={version} lastPublished={lastPublished} onPreview={openPreview} previewLoading={previewLoading} />}
+            {page === 'history' && <HistoryView history={history} onRequestCancellation={requestCancellation} />}
             {page === 'participants' && <ParticipantsView ranking={ranking} />}
             {page === 'games' && <GamesView />}
-            {page === 'approvals' && <ApprovalsView status={cancellationStatus} onApprove={approveCancellation} onReject={rejectCancellation} onGoToDashboard={() => setPage('dashboard')} />}
+            {page === 'approvals' && <ApprovalsView cancellations={cancellations} onApprove={approveCancellation} onReject={rejectCancellation} onGoToDashboard={() => setPage('dashboard')} />}
           </div>
         </section>
       </main>
 
       <RegistrationDialog open={registerOpen} onOpenChange={setRegisterOpen} participants={ranking} products={products} participant={participant} setParticipant={setParticipant} product={product} setProduct={setProduct} quantity={quantity} setQuantity={setQuantity} onSave={() => registerMovement()} />
-      <PublicationDialog open={previewOpen} onOpenChange={setPreviewOpen} pending={pending} total={total} publishedTotal={publishedTotal} changedPeople={changedPeople} onPublish={publish} />
+      <PublicationDialog open={previewOpen} onOpenChange={setPreviewOpen} pending={pending} total={total} publishedTotal={publishedTotal} changedPeople={changedPeople} preview={previewData} onPublish={publish} />
     </>
   );
 }
 
-function Dashboard({ ranking, pending, total, version, lastPublished, onPreview }: { ranking: Person[]; pending: number; total: number; version: number; lastPublished: string; onPreview: () => void }) {
+function Dashboard({ ranking, pending, pendingTotal, pendingParticipants, total, version, lastPublished, onPreview, previewLoading }: { ranking: Person[]; pending: number; pendingTotal: number; pendingParticipants: number; total: number; version: number; lastPublished: string; onPreview: () => void; previewLoading: boolean }) {
   return <>
     <section className={pending ? 'status-banner' : 'status-banner published'} aria-label="Status de publicação">
       <div className="status-icon">{pending ? <Radio size={20} /> : <Check size={20} />}</div>
-      <div className="status-copy"><strong>{pending ? `${pending} alterações aguardam publicação` : 'Gestão e placar estão sincronizados'}</strong><span>O placar da TV exibe a versão {version}, publicada {lastPublished}.</span></div>
-      {pending > 0 && <Button className="publish-button" onClick={onPreview}>Revisar e publicar <ArrowUpRight size={17} /></Button>}
+      <div className="status-copy"><strong>{pending ? `${pending} alterações aguardam publicação` : 'Gestão e placar estão sincronizados'}</strong><span>{pending ? `${pendingTotal} inscrições líquidas · ${pendingParticipants} participantes afetadas · ` : ''}O placar da TV exibe a versão {version}, publicada {lastPublished}.</span></div>
+      {pending > 0 && <Button className="publish-button" onClick={onPreview} disabled={previewLoading}>{previewLoading ? 'Gerando prévia…' : <>Revisar e publicar <ArrowUpRight size={17} /></>}</Button>}
     </section>
 
     <section className="metrics-grid" aria-label="Indicadores da gincana">
@@ -313,11 +326,12 @@ function Activity() {
   return <><div className="activity-item"><span className="activity-dot orange" /><p><strong>Jaqueline</strong> confirmou 2 inscrições para o CONBROP.<small>há 18 min</small></p></div><div className="activity-item"><span className="activity-dot blue" /><p><strong>Alana</strong> alcançou 80% da meta individual.<small>há 1 h</small></p></div><div className="activity-item"><span className="activity-dot gold" /><p><strong>Danyelle</strong> avançou para o pódio.<small>ontem, 17:24</small></p></div></>;
 }
 
-function HistoryView({ cancellationStatus }: { cancellationStatus: 'pending' | 'approved' | 'rejected' }) {
-  const rows = [
-    ['Hoje, 10:37', 'Jaqueline', 'CONBROP', '+2', 'Ativo'], ['Hoje, 09:12', 'Alana', 'Formação em Licitações', '+1', 'Ativo'], ['Ontem, 17:24', 'Danyelle', 'CONBROP', '+3', 'Ativo'], ['Ontem, 14:03', 'Priscila', 'Pregão Eletrônico', '+1', 'Ativo'], ['04 set, 16:18', 'Eveline', 'Treinamento In Company', '+2', cancellationStatus === 'approved' ? 'Revertido' : cancellationStatus === 'rejected' ? 'Ativo' : 'Cancelamento pendente'],
-  ];
-  return <section className="list-page panel-card"><div className="list-page-head"><div><p className="eyebrow">Histórico auditável</p><h2>Movimentações recentes</h2></div><Input aria-label="Pesquisar lançamentos" placeholder="Pesquisar participante ou produto" className="search-input" /></div><div className="data-table"><div className="data-row data-head"><span>Data</span><span>Participante</span><span>Produto</span><span>Inscrições</span><span>Status</span></div>{rows.map((row) => <div className="data-row" key={row.join('-')}>{row.map((cell, index) => <span key={cell} className={index === 4 ? 'status-cell' : ''}>{cell}</span>)}</div>)}</div></section>;
+function HistoryView({ history, onRequestCancellation }: { history: LiveHistoryRow[]; onRequestCancellation: (launchId: string) => void }) {
+  const [participantFilter, setParticipantFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
+  const [publicationFilter, setPublicationFilter] = useState<'all' | 'published' | 'pending'>('all');
+  const filtered = history.filter((row) => (!participantFilter || row.participant.toLowerCase().includes(participantFilter.toLowerCase())) && (!productFilter || row.product.toLowerCase().includes(productFilter.toLowerCase())) && (publicationFilter === 'all' || publicationFilter === 'pending' && row.pendingPublication || publicationFilter === 'published' && !row.pendingPublication));
+  return <section className="list-page panel-card"><div className="list-page-head"><div><p className="eyebrow">Histórico auditável</p><h2>Movimentações recentes</h2></div><Input aria-label="Pesquisar participante" placeholder="Participante" className="search-input" value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)} /><Input aria-label="Pesquisar produto" placeholder="Produto" className="search-input" value={productFilter} onChange={(event) => setProductFilter(event.target.value)} /><select aria-label="Filtrar publicação" value={publicationFilter} onChange={(event) => setPublicationFilter(event.target.value as typeof publicationFilter)}><option value="all">Todos</option><option value="pending">Pendentes</option><option value="published">Publicados</option></select></div><div className="data-table"><div className="data-row data-head"><span>Data</span><span>Participante</span><span>Produto</span><span>Quantidade</span><span>Situação</span><span>Versão</span><span>Responsável</span><span>Ação</span></div>{filtered.length ? filtered.map((row) => <div className="data-row" key={row.id}><span>{row.date || '—'}</span><span>{row.participant || '—'}</span><span>{row.product || '—'}</span><span>{row.quantity > 0 ? `+${row.quantity}` : row.quantity}</span><span className="status-cell">{row.status === 'ATIVO' ? 'Ativo' : row.status === 'REVERTIDO' ? 'Revertido' : row.status}</span><span>{row.pendingPublication ? 'Pendente de publicação' : row.publishedVersion || '—'}</span><span>{row.createdBy || '—'}</span><span>{row.status === 'ATIVO' && <Button variant="outline" onClick={() => onRequestCancellation(row.id)}>Solicitar cancelamento</Button>}</span></div>) : <div className="empty-row">Nenhum lançamento encontrado.</div>}</div></section>;
 }
 
 function ParticipantsView({ ranking }: { ranking: Person[] }) {
@@ -328,19 +342,26 @@ function GamesView() {
   return <section className="games-grid"><article className="panel-card game-card active-game"><span className="game-status"><Radio size={14}/> Ativa</span><p className="eyebrow">06 a 24 de setembro</p><h2>Gincana Rumo ao Topo</h2><p>Ranking geral por inscrições · 9 participantes · meta de 120</p><div className="game-card-footer"><Progress value={61.7}/><strong>61,7%</strong></div></article><article className="panel-card game-card draft-game"><span className="game-status">Rascunho</span><p className="eyebrow">Próxima temporada</p><h2>Campanha de Outubro</h2><p>Defina participantes, produtos e regras antes de ativar.</p><Button variant="outline">Continuar configuração</Button></article></section>;
 }
 
-function ApprovalsView({ status, onApprove, onReject, onGoToDashboard }: { status: 'pending' | 'approved' | 'rejected'; onApprove: () => void; onReject: () => void; onGoToDashboard: () => void }) {
-  return <section className="approval-layout"><article className={`panel-card approval-card ${status !== 'pending' ? `resolved ${status}` : ''}`}><div className="approval-top"><span className="avatar large">EV</span><div><p className="eyebrow">Cancelamento solicitado hoje, 09:48</p><h2>Eveline · Treinamento In Company</h2></div>{status !== 'pending' && <span className={`approval-status ${status}`}>{status === 'approved' ? <><CheckCircle2 size={15}/> Aprovado</> : <><XCircle size={15}/> Rejeitado</>}</span>}</div><div className="approval-details"><div><span>Lançamento original</span><strong>2 inscrições</strong></div><div><span>Motivo</span><strong>Cliente desistiu antes da confirmação financeira.</strong></div></div>{status === 'pending' ? <><p className="approval-note">Aprovar criará uma reversão. O resultado ficará pendente até a próxima publicação do placar.</p><div className="approval-actions"><Button variant="outline" onClick={onReject}><XCircle size={16}/> Rejeitar</Button><Button className="primary-action" onClick={onApprove}><CheckCircle2 size={16}/> Aprovar cancelamento</Button></div></> : <div className={`approval-result ${status}`}><div>{status === 'approved' ? <CheckCircle2 size={21}/> : <XCircle size={21}/>}<p><strong>{status === 'approved' ? 'Cancelamento aprovado e reversão criada.' : 'Cancelamento rejeitado.'}</strong><span>{status === 'approved' ? 'As 2 inscrições foram retiradas da gestão e aguardam a próxima publicação.' : 'O lançamento original permanece ativo e o placar não foi alterado.'}</span></p></div>{status === 'approved' && <Button variant="outline" onClick={onGoToDashboard}>Ver alterações pendentes <ArrowUpRight size={16}/></Button>}</div>}</article></section>;
+function ApprovalsView({ cancellations, onApprove, onReject, onGoToDashboard }: { cancellations: LiveCancellation[]; onApprove: (id: string) => void; onReject: (id: string) => void; onGoToDashboard: () => void }) {
+  const pending = cancellations.filter((item) => item.status === 'PENDENTE');
+  const resolved = cancellations.filter((item) => item.status !== 'PENDENTE');
+  return <section className="approval-layout">{pending.length ? pending.map((item) => <article className="panel-card approval-card" key={item.id}><div className="approval-top"><span className="avatar large">{item.participant.slice(0, 2).toUpperCase()}</span><div><p className="eyebrow">Cancelamento solicitado {item.requestedAt || 'recentemente'}</p><h2>{item.participant} · {item.product}</h2></div><span className="approval-status pending">Pendente</span></div><div className="approval-details"><div><span>Lançamento original</span><strong>{item.quantity} inscrições</strong></div><div><span>Motivo</span><strong>{item.reason}</strong></div></div><p className="approval-note">Aprovar criará uma reversão. O resultado ficará pendente até a próxima publicação do placar.</p><div className="approval-actions"><Button variant="outline" onClick={() => onReject(item.id)}><XCircle size={16}/> Rejeitar</Button><Button className="primary-action" onClick={() => onApprove(item.id)}><CheckCircle2 size={16}/> Aprovar cancelamento</Button></div></article>) : <article className="panel-card empty-state"><CheckCircle2 size={22}/><p>Nenhum cancelamento pendente.</p></article>}{resolved.map((item) => <article className={`panel-card approval-card resolved ${item.status === 'APROVADO' ? 'approved' : 'rejected'}`} key={item.id}><div className="approval-top"><span className="avatar large">{item.participant.slice(0, 2).toUpperCase()}</span><div><p className="eyebrow">Cancelamento analisado</p><h2>{item.participant} · {item.product}</h2></div><span className={`approval-status ${item.status === 'APROVADO' ? 'approved' : 'rejected'}`}>{item.status === 'APROVADO' ? <><CheckCircle2 size={15}/> Aprovado</> : <><XCircle size={15}/> Rejeitado</>}</span></div><div className={`approval-result ${item.status === 'APROVADO' ? 'approved' : 'rejected'}`}><div>{item.status === 'APROVADO' ? <CheckCircle2 size={21}/> : <XCircle size={21}/>}<p><strong>{item.status === 'APROVADO' ? 'Cancelamento aprovado e reversão criada.' : 'Cancelamento rejeitado.'}</strong><span>{item.status === 'APROVADO' ? 'A reversão aguarda a próxima publicação.' : item.analysisJustification || 'O lançamento original permanece ativo.'}</span></p></div>{item.status === 'APROVADO' && <Button variant="outline" onClick={onGoToDashboard}>Ver alterações pendentes <ArrowUpRight size={16}/></Button>}</div></article>)}</section>;
 }
 
 function RegistrationDialog({ open, onOpenChange, participants, products, participant, setParticipant, product, setProduct, quantity, setQuantity, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; participants: Person[]; products: Array<{ id?: string; name: string }>; participant: string; setParticipant: (value: string) => void; product: string; setProduct: (value: string) => void; quantity: number; setQuantity: (value: number) => void; onSave: () => void | Promise<unknown> }) {
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="registration-dialog"><DialogHeader><DialogTitle>Registrar nova inscrição</DialogTitle><DialogDescription>O lançamento ficará pendente até a próxima publicação do placar.</DialogDescription></DialogHeader><div className="form-grid"><div className="field"><Label htmlFor="participant">Participante</Label><select id="participant" value={participant} onChange={(event) => setParticipant(event.target.value)}>{participants.map((person) => <option key={person.name}>{person.name}</option>)}</select></div><div className="field"><Label htmlFor="product">Evento ou curso</Label><select id="product" value={product} onChange={(event) => setProduct(event.target.value)}>{products.map((item) => <option key={item.name}>{item.name}</option>)}</select></div><div className="field"><Label htmlFor="quantity">Quantidade</Label><Input id="quantity" type="number" min={1} value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value)))} /></div><div className="field"><Label htmlFor="client">Órgão ou cliente</Label><Input id="client" placeholder="Opcional" /></div><div className="field full"><Label htmlFor="notes">Observação</Label><Input id="notes" placeholder="Informação complementar" /></div></div><div className="points-preview"><span>Pontuação calculada</span><strong>{quantity * 10} pontos</strong></div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" onClick={() => { void Promise.resolve(onSave()).catch((error: unknown) => window.alert(error instanceof Error ? error.message : 'Não foi possível salvar a inscrição.')); }}><Check size={17}/> Confirmar inscrição</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function PublicationDialog({ open, onOpenChange, pending, total, publishedTotal, changedPeople, onPublish }: { open: boolean; onOpenChange: (open: boolean) => void; pending: number; total: number; publishedTotal: number; changedPeople: Person[]; onPublish: () => void }) {
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="publication-dialog"><DialogHeader><DialogTitle>Prévia da atualização</DialogTitle><DialogDescription>Confira como o placar ficará antes de liberar a nova versão para a TV.</DialogDescription></DialogHeader><div className="preview-summary"><div><span>Alterações pendentes</span><strong>{pending}</strong></div><div><span>Inscrições publicadas</span><strong>{publishedTotal}</strong></div><ArrowUpRight/><div><span>Novo total</span><strong>{total}</strong></div></div><div className="preview-list"><p className="eyebrow">Participantes afetadas</p>{changedPeople.length ? changedPeople.map((person) => <div key={person.name}><span className="avatar">{person.initials}</span><strong>{person.name}</strong><span>agora com {person.registrations} inscrições</span></div>) : <p>Nenhuma alteração individual nesta sessão; há registros fictícios pendentes na carga inicial.</p>}</div><div className="publication-warning"><RefreshCw size={18}/><p><strong>A versão atual será preservada no histórico.</strong><span>A TV só mudará depois da confirmação abaixo.</span></p></div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}><ArrowLeft size={16}/> Cancelar e revisar</Button><Button className="primary-action" onClick={onPublish}><CheckCircle2 size={17}/> Confirmar atualização</Button></DialogFooter></DialogContent></Dialog>;
+function PublicationDialog({ open, onOpenChange, pending, total, publishedTotal, changedPeople, preview, onPublish }: { open: boolean; onOpenChange: (open: boolean) => void; pending: number; total: number; publishedTotal: number; changedPeople: Person[]; preview: PreviewData | null; onPublish: () => void | Promise<unknown> }) {
+  const rows = preview?.changes || changedPeople.map((person) => ({ id: person.id || person.name, name: person.name, team: person.team, initials: person.initials, previousPosition: null, newPosition: null, previousRegistrations: 0, newRegistrations: person.registrations, movement: 'nova' as const, positionDelta: null }));
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="publication-dialog"><DialogHeader><DialogTitle>Prévia da atualização</DialogTitle><DialogDescription>Confira o cálculo real do servidor antes de liberar a nova versão para a TV.</DialogDescription></DialogHeader><div className="preview-summary"><div><span>Alterações pendentes</span><strong>{preview?.pendingCount ?? pending}</strong></div><div><span>Inscrições publicadas</span><strong>{preview?.publishedTotal ?? publishedTotal}</strong></div><ArrowUpRight/><div><span>Novo total</span><strong>{preview?.currentTotal ?? total}</strong></div></div><div className="preview-list"><p className="eyebrow">Comparação com a versão {preview?.publishedVersion ?? 0}</p>{rows.length ? rows.map((row) => <div key={row.id}><span className="avatar">{row.initials}</span><strong>{row.name}</strong><span>{row.previousPosition ? `${row.previousPosition}º → ${row.newPosition}º` : `— → ${row.newPosition}º`} · {row.previousRegistrations} → {row.newRegistrations} inscrições · {row.movement}</span></div>) : <p>Nenhuma alteração pendente.</p>}</div><div className="publication-warning"><RefreshCw size={18}/><p><strong>A versão anterior será preservada.</strong><span>A TV só mudará após a confirmação no servidor.</span></p></div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}><ArrowLeft size={16}/> Cancelar e revisar</Button><Button className="primary-action" onClick={() => { void Promise.resolve(onPublish()).catch((error: unknown) => window.alert(error instanceof Error ? error.message : 'Não foi possível publicar.')); }}><CheckCircle2 size={17}/> Confirmar atualização</Button></DialogFooter></DialogContent></Dialog>;
 }
 
-function Scoreboard({ ranking, total, version, lastPublished, onBack }: { ranking: Person[]; total: number; version: number; lastPublished: string; onBack: () => void }) {
+function Scoreboard({ ranking, total, version, lastPublished, onBack, onReload }: { ranking: Person[]; total: number; version: number; lastPublished: string; onBack: () => void; onReload: () => Promise<BootstrapData | null> }) {
+  useEffect(() => {
+    const timer = window.setInterval(() => { void onReload(); }, 15000);
+    return () => window.clearInterval(timer);
+  }, [onReload]);
   const podium = [ranking[1], ranking[0], ranking[2]];
-  return <main className="scoreboard-shell min-h-screen text-white"><header className="scoreboard-header"><div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity" /></div><div><span className="score-brand">Placar comercial</span><h1>Gincana Rumo ao Topo</h1></div></div><div className="scoreboard-meta"><span>Critério: inscrições confirmadas</span><strong>18 dias restantes</strong><button onClick={onBack}>Voltar à gestão</button></div></header><section className="scoreboard-content"><div className="podium">{podium.map((person, index) => { const place = [2, 1, 3][index]; return <article className={`podium-card place-${place}`} key={person.name}><span className="podium-place">{place}º</span><span className="podium-avatar">{person.initials}</span><h2>{person.name}</h2><p>{person.team}</p><strong>{person.registrations}<small> inscrições</small></strong><Progress value={person.progress} /><span>{person.progress}% da meta</span></article>; })}</div><aside className="score-summary"><p>Juntas, já conquistamos</p><strong>{total}</strong><span>inscrições confirmadas</span><Progress value={(total / 120) * 100} /><small>{((total / 120) * 100).toFixed(1).replace('.', ',')}% da meta coletiva</small></aside></section><footer className="score-ticker"><span className="live-dot" /><strong>Última conquista</strong><p>{ranking[0].name} está na liderança com {ranking[0].registrations} inscrições</p><span>Versão {version} · {lastPublished}</span></footer></main>;
+  return <main className="scoreboard-shell min-h-screen text-white"><header className="scoreboard-header"><div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity" /></div><div><span className="score-brand">Placar comercial</span><h1>Gincana Rumo ao Topo</h1></div></div><div className="scoreboard-meta"><span>Critério: inscrições confirmadas</span><strong>18 dias restantes</strong><button onClick={onBack}>Voltar à gestão</button><button className="score-reload" onClick={() => { void onReload(); }}><RefreshCw size={14}/> Recarregar placar</button></div></header><section className="scoreboard-content"><div className="podium">{podium.filter(Boolean).map((person, index) => { const place = [2, 1, 3][index]; return <article className={`podium-card place-${place}`} key={person.name}><span className="podium-place">{place}º</span><span className="podium-avatar">{person.initials}</span><h2>{person.name}</h2><p>{person.team}</p><strong>{person.registrations}<small> inscrições</small></strong><Progress value={person.progress} /><span>{person.progress}% da meta</span></article>; })}</div><aside className="score-summary"><p>Juntas, já conquistamos</p><strong>{total}</strong><span>inscrições confirmadas</span><Progress value={(total / 120) * 100} /><small>{((total / 120) * 100).toFixed(1).replace('.', ',')}% da meta coletiva</small></aside></section><footer className="score-ticker"><span className="live-dot" /><strong>Última conquista</strong><p>{ranking[0] ? `${ranking[0].name} está na liderança com ${ranking[0].registrations} inscrições` : 'Aguardando dados publicados'}</p><span>Versão {version} · {lastPublished}</span></footer></main>;
 }

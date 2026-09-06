@@ -17,6 +17,11 @@ function doPost(e) {
   try {
     if (action === 'bootstrap') return json_(ok_(bootstrap_()));
     if (action === 'createLaunch') return json_(ok_(createLaunch_(body)));
+    if (action === 'preview') return json_(ok_(preview_()));
+    if (action === 'publish') return json_(ok_(publish_()));
+    if (action === 'requestCancellation') return json_(ok_(requestCancellation_(body)));
+    if (action === 'approveCancellation') return json_(ok_(approveCancellation_(body)));
+    if (action === 'rejectCancellation') return json_(ok_(rejectCancellation_(body)));
     return json_(ok_(bootstrap_().published));
   } catch (error) {
     var message = error && error.message ? error.message : String(error);
