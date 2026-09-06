@@ -68,7 +68,7 @@ export default function Home() {
   const [quantity, setQuantity] = useState(1);
   const [lastPublished, setLastPublished] = useState('hoje, 10:42');
   const [cancellationStatus, setCancellationStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
-  const [, setIntegrationMode] = useState<'demo' | 'loading' | 'live' | 'error'>('loading');
+  const [integrationMode, setIntegrationMode] = useState<'demo' | 'loading' | 'live' | 'error'>('loading');
 
   const total = useMemo(() => ranking.reduce((sum, person) => sum + person.registrations, 0), [ranking]);
   const changedPeople = useMemo(() => ranking.filter((person) => person.registrations !== publishedRanking.find((published) => published.name === person.name)?.registrations), [ranking, publishedRanking]);
@@ -231,7 +231,7 @@ export default function Home() {
 
         <section className="main-panel">
           <header className="topbar">
-            <div><p className="eyebrow">{page === 'dashboard' ? 'Temporada ativa' : 'Gestão da competição'}</p><h1>{pageNames[page]}</h1></div>
+            <div><div className="topbar-kicker"><p className="eyebrow">{page === 'dashboard' ? 'Temporada ativa' : 'Gestão da competição'}</p><span className={`integration-badge ${integrationMode}`} aria-live="polite">{integrationMode === 'live' ? 'Conectado à planilha' : integrationMode === 'demo' || integrationMode === 'error' ? 'Modo demonstração' : 'Conectando à planilha…'}</span></div><h1>{pageNames[page]}</h1></div>
             <div className="topbar-actions">
               <Button variant="outline" className="rounded-full" onClick={openScoreboard}><Eye size={17} /> Ver placar da TV</Button>
               <Button className="primary-action rounded-full" onClick={() => setRegisterOpen(true)}><Plus size={18} /> Registrar inscrição</Button>
