@@ -36,7 +36,6 @@ export async function POST(request: Request) {
       },
     }, { status: 503 });
   }
-
   let body: Record<string, unknown>;
   try {
     body = await request.json() as Record<string, unknown>;
