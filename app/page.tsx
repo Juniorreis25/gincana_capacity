@@ -131,7 +131,7 @@ export default function Home() {
       <main className="admin-shell min-h-screen text-slate-950">
         <aside className="sidebar-panel">
           <div className="brand-block">
-            <div className="brand-mark" aria-hidden="true">C</div>
+            <div className="brand-placeholder" aria-label="Espaço reservado para a logo oficial">LOGO</div>
             <div><strong>Capacity</strong><span>Placar comercial</span></div>
           </div>
 
