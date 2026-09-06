@@ -27,7 +27,7 @@ function bootstrap_() {
     return text_(launch.STATUS).toUpperCase() === 'ATIVO' && (!activeId || text_(launch.GINCANA_ID) === activeId);
   }).reduce(function (result, launch) {
     var id = text_(launch.PARTICIPANTE_ID);
-    result[id] = (result[id] || 0) + number_(launch.QUANTIDADE);
+    result[id] = (result[id] || 0) + number_(launch.INSCRICOES_DELTA);
     return result;
   }, {});
 
@@ -58,7 +58,7 @@ function publishedSnapshot_(rows) {
   var latestRows = rows.filter(function (row) { return number_(row.VERSAO) === version; });
   var publishedAt = latestRows.length ? dateText_(latestRows[0].PUBLICADO_EM) : '';
   var ranking = latestRows.map(function (row) {
-    var name = text_(row.NOME_PARTICIPANTE);
+    var name = text_(row.NOME);
     var registrations = number_(row.INSCRICOES);
     var progress = row.PERCENTUAL_META === undefined || row.PERCENTUAL_META === '' ? Math.min(100, registrations * 5) : number_(row.PERCENTUAL_META);
     return { id: text_(row.PARTICIPANTE_ID), name: name, team: text_(row.EQUIPE), initials: initials_(name), registrations: registrations, progress: progress };
