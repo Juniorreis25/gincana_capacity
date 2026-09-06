@@ -70,6 +70,12 @@ export default function Home() {
   const total = useMemo(() => ranking.reduce((sum, person) => sum + person.registrations, 0), [ranking]);
   const changedPeople = useMemo(() => ranking.filter((person) => person.registrations !== publishedRanking.find((published) => published.name === person.name)?.registrations), [ranking, publishedRanking]);
 
+  const openScoreboard = () => {
+    const scoreboardUrl = `${window.location.origin}/?view=scoreboard`;
+    const scoreboardWindow = window.open(scoreboardUrl, '_blank', 'noopener,noreferrer');
+    if (scoreboardWindow) scoreboardWindow.opener = null;
+  };
+
   const registerMovement = (name = participant, amount = quantity, item = product) => {
     const safeQuantity = Number(amount);
     if (!name || !Number.isInteger(safeQuantity) || safeQuantity < 1) throw new Error('Informe uma quantidade válida.');
@@ -104,6 +110,12 @@ export default function Home() {
     if (cancellationStatus !== 'pending') return;
     setCancellationStatus('rejected');
   };
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('view') === 'scoreboard') {
+      setView('scoreboard');
+    }
+  }, []);
 
   useEffect(() => {
     const context = document.modelContext;
@@ -167,7 +179,7 @@ export default function Home() {
           <header className="topbar">
             <div><p className="eyebrow">{page === 'dashboard' ? 'Temporada ativa' : 'Gestão da competição'}</p><h1>{pageNames[page]}</h1></div>
             <div className="topbar-actions">
-              <Button variant="outline" className="rounded-full" onClick={() => setView('scoreboard')}><Eye size={17} /> Ver placar da TV</Button>
+              <Button variant="outline" className="rounded-full" onClick={openScoreboard}><Eye size={17} /> Ver placar da TV</Button>
               <Button className="primary-action rounded-full" onClick={() => setRegisterOpen(true)}><Plus size={18} /> Registrar inscrição</Button>
             </div>
           </header>
