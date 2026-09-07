@@ -146,7 +146,7 @@ function ConnectionBadge({ mode, hasData }: { mode: ConnectionMode; hasData: boo
   return <span className={`integration-badge ${mode}`} aria-live="polite">{text}</span>;
 }
 
-function LoadingScreen() { return <main className="loading-screen"><img src="/capacity-logo.png" alt="Capacity"/><p>Carregando o painel…</p></main>; }
+function LoadingScreen() { return <main className="loading-screen" aria-live="polite"><p>Carregando o painel…</p></main>; }
 
 function ConnectionError({ onRetry }: { onRetry: () => void }) { return <section className="connection-error"><div><strong>Não foi possível acessar a planilha.</strong><span>Os últimos dados válidos foram mantidos. Tente novamente.</span></div><Button variant="outline" onClick={onRetry}><RefreshCw size={16}/> Tentar novamente</Button></section>; }
 
