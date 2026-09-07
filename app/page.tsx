@@ -21,7 +21,11 @@ import {
   publishScoreboard,
   rejectCancellation as rejectLiveCancellation,
   requestCancellation as requestLiveCancellation,
+  loadAdminData,
+  adminMutation,
+  setGameAssociations,
   type BootstrapData,
+  type AdminData,
   type LiveCancellation,
   type LiveHistoryRow,
   type PreviewData,
@@ -55,6 +59,8 @@ const navItems = [
   { id: 'dashboard', label: 'Visão geral', icon: LayoutDashboard },
   { id: 'history', label: 'Lançamentos', icon: ListChecks },
   { id: 'participants', label: 'Participantes', icon: Users },
+  { id: 'teams', label: 'Equipes', icon: Users },
+  { id: 'products', label: 'Produtos', icon: ListChecks },
   { id: 'games', label: 'Gincanas', icon: Trophy },
   { id: 'approvals', label: 'Aprovações', icon: CheckCircle2 },
 ] as const;
@@ -62,6 +68,7 @@ const navItems = [
 const pageNames: Record<string, string> = {
   dashboard: 'Gincana Rumo ao Topo', history: 'Lançamentos', participants: 'Participantes',
   games: 'Gincanas', approvals: 'Aprovações',
+  teams: 'Equipes', products: 'Produtos',
 };
 
 export default function Home() {
@@ -84,6 +91,7 @@ export default function Home() {
   const [cancellations, setCancellations] = useState<LiveCancellation[]>([]);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [adminData, setAdminData] = useState<AdminData>({ teams: [], participants: [], products: [], games: [] });
 
   const total = useMemo(() => ranking.reduce((sum, person) => sum + person.registrations, 0), [ranking]);
   const pendingCancellations = useMemo(() => cancellations.filter((item) => item.status === 'PENDENTE').length, [cancellations]);
@@ -104,20 +112,22 @@ export default function Home() {
       registrations: person.registrations,
       progress: person.progress ?? Math.min(100, person.registrations * 5),
     }));
-    if (liveRanking.length) setRanking(liveRanking);
+    setRanking(liveRanking);
     if (bootstrap.products.length) {
       const liveProducts = bootstrap.products.map((item) => ({ ...item, name: item.name.replace(/^\[DEMO\]\s*/i, '') })).filter((item) => item.name);
       if (liveProducts.length) {
         setProducts(liveProducts);
         setProduct((current) => liveProducts.some((item) => item.name === current) ? current : liveProducts[0].name);
       }
-    }
+    } else setProducts([]);
     const published = bootstrap.published;
     if (published?.ranking?.length) setPublishedRanking(published.ranking.map((person) => ({ name: person.name, team: person.team || 'Sem equipe', initials: person.initials || person.name.slice(0, 2).toUpperCase(), registrations: person.registrations, progress: person.progress ?? Math.min(100, person.registrations * 5) })));
+    else setPublishedRanking([]);
     setHistory(bootstrap.history || []);
     setCancellations(bootstrap.cancellations || []);
     setPending(bootstrap.pendingCount);
     if (published) { setPublishedTotal(published.total); setVersion(published.version); setLastPublished(published.publishedAt || 'ainda não publicada'); }
+    else { setPublishedTotal(0); setVersion(0); setLastPublished('ainda não publicada'); }
     setIntegrationMode('live');
   }, []);
 
@@ -128,6 +138,14 @@ export default function Home() {
     return bootstrap;
   }, [applyBootstrap]);
 
+  const reloadAdmin = useCallback(async () => {
+    try { setAdminData(await loadAdminData()); } catch { /* mantém a leitura principal e exibe o estado atual */ }
+  }, []);
+
+  const mutateAdmin = async (action: string, input: Record<string, unknown> = {}) => {
+    try { setAdminData(await adminMutation(action, input)); } catch (error) { window.alert(error instanceof Error ? error.message : 'Não foi possível concluir a operação.'); }
+  };
+
   const registerMovement = async (name = participant, amount = quantity, _item = product) => {
     const safeQuantity = Number(amount);
     if (!name || !Number.isInteger(safeQuantity) || safeQuantity < 1) throw new Error('Informe uma quantidade válida.');
@@ -137,6 +155,7 @@ export default function Home() {
       if (!selectedPerson?.id || !selectedProduct?.id) throw new Error('Participante ou produto sem identificador na planilha.');
       const bootstrap = await createLaunch({ participantId: selectedPerson.id, productId: selectedProduct.id, quantity: safeQuantity });
       applyBootstrap(bootstrap);
+      void reloadAdmin();
       setRegisterOpen(false);
       return { status: 'pending_publication', participant: name, quantity: safeQuantity, persisted: true };
     }
@@ -194,6 +213,7 @@ export default function Home() {
         return;
       }
       applyBootstrap(bootstrap);
+      void reloadAdmin();
     }).catch(() => {
       if (mounted) setIntegrationMode('error');
     });
@@ -201,7 +221,7 @@ export default function Home() {
       mounted = false;
       controller.abort();
     };
-  }, [applyBootstrap]);
+  }, [applyBootstrap, reloadAdmin]);
 
   useEffect(() => {
     const context = document.modelContext;
@@ -273,8 +293,10 @@ export default function Home() {
           <div className="content-wrap">
             {page === 'dashboard' && <Dashboard ranking={ranking} pending={pending} pendingTotal={history.filter((row) => row.pendingPublication).reduce((sum, row) => sum + row.quantity, 0)} pendingParticipants={new Set(history.filter((row) => row.pendingPublication).map((row) => row.participantId)).size} total={total} version={version} lastPublished={lastPublished} onPreview={openPreview} previewLoading={previewLoading} />}
             {page === 'history' && <HistoryView history={history} onRequestCancellation={requestCancellation} />}
-            {page === 'participants' && <ParticipantsView ranking={ranking} />}
-            {page === 'games' && <GamesView />}
+            {page === 'participants' && <ParticipantsView data={adminData} onMutate={mutateAdmin} />}
+            {page === 'teams' && <TeamsView data={adminData} onMutate={mutateAdmin} />}
+            {page === 'products' && <ProductsView data={adminData} onMutate={mutateAdmin} />}
+            {page === 'games' && <GamesView data={adminData} onMutate={mutateAdmin} onAssociate={async (gameId, participantIds, productIds) => { try { setAdminData(await setGameAssociations(gameId, participantIds, productIds)); } catch (error) { window.alert(error instanceof Error ? error.message : 'Não foi possível salvar as associações.'); } }} />}
             {page === 'approvals' && <ApprovalsView cancellations={cancellations} onApprove={approveCancellation} onReject={rejectCancellation} onGoToDashboard={() => setPage('dashboard')} />}
           </div>
         </section>
@@ -297,7 +319,7 @@ function Dashboard({ ranking, pending, pendingTotal, pendingParticipants, total,
     <section className="metrics-grid" aria-label="Indicadores da gincana">
       <Metric label="Inscrições confirmadas" value={String(total)} detail="de 120 na meta coletiva" icon={<ListChecks />} />
       <Metric label="Participantes ativas" value="9" detail="em 3 equipes" icon={<Users />} />
-      <Metric label="Líder atual" value={ranking[0].name} detail={`${ranking[0].registrations} inscrições`} icon={<Medal />} featured />
+      <Metric label="Líder atual" value={ranking[0]?.name || 'Ainda não definido'} detail={ranking[0] ? `${ranking[0].registrations} inscrições` : 'Aguardando dados'} icon={<Medal />} featured />
       <Metric label="Dias restantes" value="18" detail="encerra em 24 de setembro" icon={<Clock3 />} />
     </section>
 
@@ -334,12 +356,36 @@ function HistoryView({ history, onRequestCancellation }: { history: LiveHistoryR
   return <section className="list-page panel-card"><div className="list-page-head"><div><p className="eyebrow">Histórico auditável</p><h2>Movimentações recentes</h2></div><Input aria-label="Pesquisar participante" placeholder="Participante" className="search-input" value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)} /><Input aria-label="Pesquisar produto" placeholder="Produto" className="search-input" value={productFilter} onChange={(event) => setProductFilter(event.target.value)} /><select aria-label="Filtrar publicação" value={publicationFilter} onChange={(event) => setPublicationFilter(event.target.value as typeof publicationFilter)}><option value="all">Todos</option><option value="pending">Pendentes</option><option value="published">Publicados</option></select></div><div className="data-table"><div className="data-row data-head"><span>Data</span><span>Participante</span><span>Produto</span><span>Quantidade</span><span>Situação</span><span>Versão</span><span>Responsável</span><span>Ação</span></div>{filtered.length ? filtered.map((row) => <div className="data-row" key={row.id}><span>{row.date || '—'}</span><span>{row.participant || '—'}</span><span>{row.product || '—'}</span><span>{row.quantity > 0 ? `+${row.quantity}` : row.quantity}</span><span className="status-cell">{row.status === 'ATIVO' ? 'Ativo' : row.status === 'REVERTIDO' ? 'Revertido' : row.status}</span><span>{row.pendingPublication ? 'Pendente de publicação' : row.publishedVersion || '—'}</span><span>{row.createdBy || '—'}</span><span>{row.status === 'ATIVO' && <Button variant="outline" onClick={() => onRequestCancellation(row.id)}>Solicitar cancelamento</Button>}</span></div>) : <div className="empty-row">Nenhum lançamento encontrado.</div>}</div></section>;
 }
 
-function ParticipantsView({ ranking }: { ranking: Person[] }) {
-  return <section className="list-page panel-card"><div className="list-page-head"><div><p className="eyebrow">Equipe comercial</p><h2>9 participantes ativas</h2></div><Button variant="outline"><Plus size={16}/> Nova participante</Button></div><div className="people-grid">{ranking.map((person) => <article className="person-card" key={person.name}><span className="avatar large">{person.initials}</span><div><strong>{person.name}</strong><p>{person.team}</p></div><span className="person-score">{person.registrations}<small> inscrições</small></span></article>)}</div></section>;
+function promptValue(label: string, initial = '') { const value = window.prompt(label, initial); return value?.trim() || ''; }
+
+function AdminActions({ kind, item, onMutate }: { kind: 'team' | 'participant' | 'product' | 'game'; item: { id: string; name: string; active?: boolean; status?: string; historyCount?: number }; onMutate: (action: string, input?: Record<string, unknown>) => void }) {
+  const prefix = kind.charAt(0).toUpperCase() + kind.slice(1);
+  const isActive = item.active ?? item.status === 'ATIVA';
+  return <div className="admin-row-actions"><Button variant="outline" onClick={() => { const name = promptValue(`Nome de ${prefix.toLowerCase()}`, item.name); if (name) void onMutate(`update${prefix}`, { id: item.id, name }); }}>Editar</Button><Button variant="outline" onClick={() => void onMutate(isActive ? `deactivate${prefix}` : `update${prefix}`, isActive ? { id: item.id } : { id: item.id, name: item.name, active: true })}>{isActive ? 'Desativar' : 'Reativar'}</Button><Button variant="outline" onClick={() => { if (window.confirm(item.historyCount ? 'Este registro possui histórico e não pode ser excluído. Desativar em vez disso?' : 'Excluir este registro?')) void onMutate(`delete${prefix}`, { id: item.id }); }}>Excluir</Button></div>;
 }
 
-function GamesView() {
-  return <section className="games-grid"><article className="panel-card game-card active-game"><span className="game-status"><Radio size={14}/> Ativa</span><p className="eyebrow">06 a 24 de setembro</p><h2>Gincana Rumo ao Topo</h2><p>Ranking geral por inscrições · 9 participantes · meta de 120</p><div className="game-card-footer"><Progress value={61.7}/><strong>61,7%</strong></div></article><article className="panel-card game-card draft-game"><span className="game-status">Rascunho</span><p className="eyebrow">Próxima temporada</p><h2>Campanha de Outubro</h2><p>Defina participantes, produtos e regras antes de ativar.</p><Button variant="outline">Continuar configuração</Button></article></section>;
+function ParticipantsView({ data, onMutate }: { data: AdminData; onMutate: (action: string, input?: Record<string, unknown>) => void }) {
+  const teamName = (id: string) => data.teams.find((team) => team.id === id)?.name || 'Sem equipe';
+  return <section className="list-page panel-card"><div className="list-page-head"><div><p className="eyebrow">Cadastros conectados</p><h2>Participantes</h2></div><Button variant="outline" onClick={() => { const name = promptValue('Nome da participante'); if (name) void onMutate('createParticipant', { name, teamId: data.teams[0]?.id || '' }); }}><Plus size={16}/> Nova participante</Button></div>{data.participants.length ? <div className="people-grid">{data.participants.map((person) => <article className="person-card" key={person.id}><span className="avatar large">{person.name.slice(0, 2).toUpperCase()}</span><div><strong>{person.name}</strong><p>{teamName(person.teamId)} · {person.active ? 'Ativa' : 'Inativa'}</p></div><AdminActions kind="participant" item={person} onMutate={onMutate} /></article>)}</div> : <div className="empty-state"><Users size={22}/><p>Base conectada, mas ainda sem participantes cadastradas.</p></div>}</section>;
+}
+
+function TeamsView({ data, onMutate }: { data: AdminData; onMutate: (action: string, input?: Record<string, unknown>) => void }) {
+  return <section className="list-page panel-card"><div className="list-page-head"><div><p className="eyebrow">Cadastros conectados</p><h2>Equipes</h2></div><Button variant="outline" onClick={() => { const name = promptValue('Nome da equipe'); if (name) void onMutate('createTeam', { name }); }}><Plus size={16}/> Nova equipe</Button></div>{data.teams.length ? <div className="people-grid">{data.teams.map((team) => <article className="person-card" key={team.id}><span className="avatar large">{team.name.slice(0, 2).toUpperCase()}</span><div><strong>{team.name}</strong><p>{team.active ? 'Ativa' : 'Inativa'}</p></div><AdminActions kind="team" item={team} onMutate={onMutate} /></article>)}</div> : <div className="empty-state"><Users size={22}/><p>Base conectada, mas ainda sem equipes cadastradas.</p></div>}</section>;
+}
+
+function ProductsView({ data, onMutate }: { data: AdminData; onMutate: (action: string, input?: Record<string, unknown>) => void }) {
+  return <section className="list-page panel-card"><div className="list-page-head"><div><p className="eyebrow">Cadastros conectados</p><h2>Produtos e eventos</h2></div><Button variant="outline" onClick={() => { const name = promptValue('Nome do produto ou evento'); if (name) void onMutate('createProduct', { name, category: 'OUTRO', points: 1 }); }}><Plus size={16}/> Novo produto</Button></div>{data.products.length ? <div className="people-grid">{data.products.map((product) => <article className="person-card" key={product.id}><span className="avatar large">{product.name.slice(0, 2).toUpperCase()}</span><div><strong>{product.name}</strong><p>{product.category || 'OUTRO'} · {product.active ? 'Ativo' : 'Inativo'}</p></div><AdminActions kind="product" item={product} onMutate={onMutate} /></article>)}</div> : <div className="empty-state"><ListChecks size={22}/><p>Base conectada, mas ainda sem produtos cadastrados.</p></div>}</section>;
+}
+
+function GamesView({ data, onMutate, onAssociate }: { data: AdminData; onMutate: (action: string, input?: Record<string, unknown>) => void; onAssociate: (gameId: string, participantIds: string[], productIds: string[]) => void }) {
+  const [selected, setSelected] = useState<string>('');
+  const game = data.games.find((item) => item.id === selected) || data.games[0];
+  return <section className="games-grid"><div className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Cadastros conectados</p><h2>Gincanas</h2></div><Button variant="outline" onClick={() => { const name = promptValue('Nome da gincana'); if (name) void onMutate('createGame', { name, startDate: new Date().toISOString().slice(0, 10), endDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10) }); }}><Plus size={16}/> Nova gincana</Button></div>{data.games.length ? data.games.map((item) => <article className="game-card" key={item.id}><span className="game-status">{item.status}</span><h2>{item.name}</h2><p>{item.participants.length} participantes · {item.products.length} produtos · versão {item.publishedVersion}</p><div className="admin-row-actions"><Button variant="outline" onClick={() => setSelected(item.id)}>Gerenciar associações</Button>{item.status !== 'ATIVA' && <Button className="primary-action" onClick={() => void onMutate('activateGame', { id: item.id })}>Ativar</Button>}{item.status === 'ATIVA' && <Button variant="outline" onClick={() => void onMutate('deactivateGame', { id: item.id })}>Desativar</Button>}<AdminActions kind="game" item={item} onMutate={onMutate} /></div></article>) : <div className="empty-state"><Trophy size={22}/><p>Base conectada, mas ainda sem gincanas cadastradas.</p></div>}</div>{game && <article className="panel-card list-page"><p className="eyebrow">Associações básicas</p><h2>{game.name}</h2><p>Selecione os participantes e produtos desta gincana.</p><AssociationEditor data={data} game={game} onSave={onAssociate}/></article>}</section>;
+}
+
+function AssociationEditor({ data, game, onSave }: { data: AdminData; game: AdminData['games'][number]; onSave: (gameId: string, participantIds: string[], productIds: string[]) => void }) {
+  const [participants, setParticipants] = useState(game.participants); const [products, setProducts] = useState(game.products);
+  return <div className="form-grid"><div className="field"><Label>Participantes</Label><select multiple value={participants} onChange={(event) => setParticipants(Array.from(event.target.selectedOptions).map((option) => option.value))}>{data.participants.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div><div className="field"><Label>Produtos</Label><select multiple value={products} onChange={(event) => setProducts(Array.from(event.target.selectedOptions).map((option) => option.value))}>{data.products.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div><Button className="primary-action" onClick={() => onSave(game.id, participants, products)}>Salvar associações</Button></div>;
 }
 
 function ApprovalsView({ cancellations, onApprove, onReject, onGoToDashboard }: { cancellations: LiveCancellation[]; onApprove: (id: string) => void; onReject: (id: string) => void; onGoToDashboard: () => void }) {
@@ -363,5 +409,6 @@ function Scoreboard({ ranking, total, version, lastPublished, onBack, onReload }
     return () => window.clearInterval(timer);
   }, [onReload]);
   const podium = [ranking[1], ranking[0], ranking[2]];
-  return <main className="scoreboard-shell min-h-screen text-white"><header className="scoreboard-header"><div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity" /></div><div><span className="score-brand">Placar comercial</span><h1>Gincana Rumo ao Topo</h1></div></div><div className="scoreboard-meta"><span>Critério: inscrições confirmadas</span><strong>18 dias restantes</strong><button onClick={onBack}>Voltar à gestão</button><button className="score-reload" onClick={() => { void onReload(); }}><RefreshCw size={14}/> Recarregar placar</button></div></header><section className="scoreboard-content"><div className="podium">{podium.filter(Boolean).map((person, index) => { const place = [2, 1, 3][index]; return <article className={`podium-card place-${place}`} key={person.name}><span className="podium-place">{place}º</span><span className="podium-avatar">{person.initials}</span><h2>{person.name}</h2><p>{person.team}</p><strong>{person.registrations}<small> inscrições</small></strong><Progress value={person.progress} /><span>{person.progress}% da meta</span></article>; })}</div><aside className="score-summary"><p>Juntas, já conquistamos</p><strong>{total}</strong><span>inscrições confirmadas</span><Progress value={(total / 120) * 100} /><small>{((total / 120) * 100).toFixed(1).replace('.', ',')}% da meta coletiva</small></aside></section><footer className="score-ticker"><span className="live-dot" /><strong>Última conquista</strong><p>{ranking[0] ? `${ranking[0].name} está na liderança com ${ranking[0].registrations} inscrições` : 'Aguardando dados publicados'}</p><span>Versão {version} · {lastPublished}</span></footer></main>;
+  const empty = ranking.length === 0 || version === 0;
+  return <main className="scoreboard-shell min-h-screen text-white"><header className="scoreboard-header"><div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity" /></div><div><span className="score-brand">Placar comercial</span><h1>Gincana Comercial Capacity</h1></div></div><div className="scoreboard-meta"><span>Critério: inscrições confirmadas</span><strong>{empty ? 'Aguardando publicação' : 'Placar publicado'}</strong><button onClick={onBack}>Voltar à gestão</button><button className="score-reload" onClick={() => { void onReload(); }}><RefreshCw size={14}/> Recarregar placar</button></div></header>{empty ? <section className="scoreboard-content"><div className="score-empty"><Trophy size={42}/><h2>Placar ainda não publicado</h2><p>A TV será atualizada quando a supervisora publicar uma nova versão.</p></div></section> : <section className="scoreboard-content"><div className="podium">{podium.filter(Boolean).map((person, index) => { const place = [2, 1, 3][index]; return <article className={`podium-card place-${place}`} key={person.name}><span className="podium-place">{place}º</span><span className="podium-avatar">{person.initials}</span><h2>{person.name}</h2><p>{person.team}</p><strong>{person.registrations}<small> inscrições</small></strong><Progress value={person.progress} /><span>{person.progress}% da meta</span></article>; })}</div><aside className="score-summary"><p>Juntas, já conquistamos</p><strong>{total}</strong><span>inscrições confirmadas</span><Progress value={(total / 120) * 100} /><small>{((total / 120) * 100).toFixed(1).replace('.', ',')}% da meta coletiva</small></aside></section>}<footer className="score-ticker"><span className="live-dot" /><strong>Última conquista</strong><p>{ranking[0] ? `${ranking[0].name} está na liderança com ${ranking[0].registrations} inscrições` : 'Aguardando dados publicados'}</p><span>{empty ? 'Nenhuma versão publicada' : `Versão ${version} · ${lastPublished}`}</span></footer></main>;
 }

@@ -84,6 +84,13 @@ export type BootstrapData = {
   published: PublishedSnapshot | null;
 };
 
+export type AdminData = {
+  teams: Array<{ id: string; name: string; color?: string; active: boolean; createdAt?: string }>;
+  participants: Array<{ id: string; name: string; teamId: string; active: boolean; historyCount: number; createdAt?: string }>;
+  products: Array<{ id: string; name: string; category: string; eventDate?: string; active: boolean; points: number; historyCount: number; createdAt?: string }>;
+  games: Array<{ id: string; name: string; slug: string; startDate?: string; endDate?: string; status: string; criterion: string; format: string; goal: number; publishedVersion: number; participants: string[]; products: string[] }>;
+};
+
 export type IntegrationResponse<T> = {
   ok: boolean;
   data?: T;
@@ -152,3 +159,7 @@ export function approveCancellation(cancellationId: string): Promise<BootstrapDa
 export function rejectCancellation(cancellationId: string, justification: string): Promise<BootstrapData> {
   return postAction<BootstrapData>({ action: 'rejectCancellation', cancellationId, justification }, 'Não foi possível rejeitar o cancelamento.');
 }
+
+export function loadAdminData(): Promise<AdminData> { return postAction<AdminData>({ action: 'adminData' }, 'Não foi possível carregar os cadastros.'); }
+export function adminMutation(action: string, input: Record<string, unknown> = {}): Promise<AdminData> { return postAction<AdminData>({ action, ...input }, 'Não foi possível concluir a operação.'); }
+export function setGameAssociations(gameId: string, participantIds: string[], productIds: string[]): Promise<AdminData> { return adminMutation('setGameAssociations', { gameId, participantIds, productIds }); }

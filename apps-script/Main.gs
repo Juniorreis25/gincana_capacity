@@ -22,6 +22,12 @@ function doPost(e) {
     if (action === 'requestCancellation') return json_(ok_(requestCancellation_(body)));
     if (action === 'approveCancellation') return json_(ok_(approveCancellation_(body)));
     if (action === 'rejectCancellation') return json_(ok_(rejectCancellation_(body)));
+    if (action === 'adminData') return json_(ok_(adminData_()));
+    if (action === 'createTeam' || action === 'updateTeam' || action === 'deleteTeam' || action === 'deactivateTeam') return json_(ok_(adminMutate_('team', action, body)));
+    if (action === 'createParticipant' || action === 'updateParticipant' || action === 'deleteParticipant' || action === 'deactivateParticipant') return json_(ok_(adminMutate_('participant', action, body)));
+    if (action === 'createProduct' || action === 'updateProduct' || action === 'deleteProduct' || action === 'deactivateProduct') return json_(ok_(adminMutate_('product', action, body)));
+    if (action === 'createGame' || action === 'updateGame' || action === 'deleteGame' || action === 'activateGame' || action === 'deactivateGame') return json_(ok_(adminMutate_('game', action, body)));
+    if (action === 'setGameAssociations') return json_(ok_(setGameAssociations_(body)));
     return json_(ok_(bootstrap_().published));
   } catch (error) {
     var message = error && error.message ? error.message : String(error);
