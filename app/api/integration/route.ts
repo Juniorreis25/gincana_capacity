@@ -4,8 +4,8 @@ type RuntimeEnv = {
 };
 
 type BootstrapPayload = {
-  participants: Array<{ id: string }>;
-  history: Array<{ participantId: string; productId: string; status: string }>;
+  participants: Array<{ id: string; name: string; avatarUrl?: string; registrations: number }>;
+  history: Array<{ participantId: string; productId: string; quantity: number; status: string }>;
   products: Array<{ id: string; name: string }>;
 };
 
@@ -74,11 +74,20 @@ export async function POST(request: Request) {
         if (adminPayload.ok && adminPayload.data) {
           const activeParticipants = new Set(adminPayload.data.participants.filter((item) => item.active).map((item) => item.id));
           const activeProducts = new Set(adminPayload.data.products.filter((item) => item.active).map((item) => item.id));
-          payload.data.participants = payload.data.participants.filter((item) => activeParticipants.has(item.id));
           payload.data.products = payload.data.products.filter((item) => activeProducts.has(item.id));
           payload.data.history = payload.data.history.map((item) => activeParticipants.has(item.participantId) && activeProducts.has(item.productId)
             ? item
             : { ...item, status: 'INATIVADO' });
+          const totals = new Map<string, number>();
+          payload.data.history.forEach((item) => {
+            if (item.status !== 'ATIVO' || !activeParticipants.has(item.participantId) || !activeProducts.has(item.productId)) return;
+            totals.set(item.participantId, (totals.get(item.participantId) || 0) + (Number(item.quantity) || 0));
+          });
+          payload.data.participants = payload.data.participants
+            .filter((item) => activeParticipants.has(item.id))
+            .map((item) => ({ ...item, registrations: totals.get(item.id) || 0 }))
+            .filter((item) => item.registrations > 0)
+            .sort((a, b) => b.registrations - a.registrations || a.name.localeCompare(b.name));
         }
       }
     }
