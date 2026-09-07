@@ -119,9 +119,8 @@ export default function Home() {
   return <>
     <main className="admin-shell min-h-screen text-slate-950">
       <aside className="sidebar-panel">
-        <div className="brand-block"><div className="brand-logo-wrap"><img src="/capacity-logo.png" alt="Capacity" /></div><span>Placar comercial</span></div>
+        <div className="brand-block"><div className="brand-logo-wrap"><img src="/capacity-logo.png" alt="Capacity" /></div></div>
         <nav aria-label="Navegação principal" className="nav-list">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setPage(item.id)} className={page === item.id ? 'nav-item active' : 'nav-item'}><Icon size={19} />{item.label}</button>; })}</nav>
-        <div className="sidebar-footer"><div className="user-chip"><span>MS</span><div><strong>Marina Souza</strong><small>Supervisora</small></div></div></div>
       </aside>
       <section className="main-panel">
         <header className="topbar">
@@ -261,7 +260,7 @@ function Scoreboard({ ranking, mode, onReload }: { ranking: RankingRow[]; mode: 
 
   return <main className="scoreboard-shell min-h-screen text-white">
     <header className="scoreboard-header">
-      <div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity"/></div><div><span className="score-brand">Gincana Comercial Capacity</span><h1>Ranking ao vivo</h1></div></div>
+      <div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity"/></div><div><span className="score-brand">Campanha Comercial Capacity</span><h1>Ranking ao vivo</h1></div></div>
       <div className="scoreboard-stats"><div><strong>{total}</strong><span>Total de inscrições</span></div><div><strong>{ranking.length}</strong><span>Participantes</span></div><div><strong>{updatedLabel}</strong><span>Última atualização</span></div></div>
       <div className="scoreboard-controls"><span className={`score-connection ${mode}`}><i/> {connectionLabel}</span><button className="score-reload" onClick={() => void onReload()} aria-label="Recarregar placar"><RefreshCw size={14}/> Atualizar</button></div>
     </header>
