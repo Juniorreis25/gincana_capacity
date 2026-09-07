@@ -41,14 +41,21 @@ function adminMutate_(kind, action, input) {
         else updateObjectById_(sheetName, id, { ATIVO: 'NAO' });
         auditAdmin_('DESATIVAR', kind, id, current, { ATIVO: 'NAO' });
       } else {
-        var changes = adminObject_(kind, input, now); delete changes.ID; delete changes.CRIADO_EM;
-        if (kind === 'game') changes.ATUALIZADO_EM = now;
+        var changes = adminChanges_(kind, input, current, now);
         updateObjectById_(sheetName, id, changes);
         auditAdmin_('EDITAR', kind, id, current, changes);
       }
     }
     return adminData_();
   } finally { lock.releaseLock(); }
+}
+
+function adminChanges_(kind, input, current, now) {
+  if (kind === 'team') return { NOME: text_(input.name) || text_(current.NOME), COR: input.color === undefined ? text_(current.COR) : text_(input.color) };
+  if (kind === 'participant') return { NOME: text_(input.name) || text_(current.NOME), EQUIPE_ID: input.teamId === undefined ? text_(current.EQUIPE_ID) : text_(input.teamId), AVATAR_URL: input.avatarUrl === undefined ? text_(current.AVATAR_URL) : text_(input.avatarUrl) };
+  if (kind === 'product') return { NOME: text_(input.name) || text_(current.NOME), CATEGORIA: input.category === undefined ? text_(current.CATEGORIA) : text_(input.category), DATA_EVENTO: input.eventDate === undefined ? text_(current.DATA_EVENTO) : text_(input.eventDate), PONTOS_POR_UNIDADE: input.points === undefined ? number_(current.PONTOS_POR_UNIDADE) : number_(input.points) };
+  var changes = { NOME: text_(input.name) || text_(current.NOME), SLUG: input.slug === undefined ? text_(current.SLUG) : text_(input.slug), DATA_INICIO: input.startDate === undefined ? current.DATA_INICIO : input.startDate, DATA_FIM: input.endDate === undefined ? current.DATA_FIM : input.endDate, STATUS: input.status === undefined ? text_(current.STATUS) : text_(input.status), CRITERIO_PRINCIPAL: input.criterion === undefined ? text_(current.CRITERIO_PRINCIPAL) : text_(input.criterion), FORMATO_RANKING: input.format === undefined ? text_(current.FORMATO_RANKING) : text_(input.format), META_COLETIVA: input.goal === undefined ? number_(current.META_COLETIVA) : number_(input.goal), ATUALIZADO_EM: now };
+  return changes;
 }
 
 function adminObject_(kind, input, now) {
