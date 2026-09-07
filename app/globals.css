@@ -91,6 +91,19 @@ button { font: inherit; }
 @media (prefers-reduced-motion: reduce) { .scoreboard-pulse .podium-place-1,.score-rank-row.movement-up,.score-rank-row.movement-down,.leader-alert { animation:none; } }
 .podium-tie { display:inline-flex;margin-top:6px;color:#dce8f3;font-size:10px;font-weight:700; }
 .podium-deck { align-items:center; }
+.score-rankings-head > span:nth-child(1) { text-align:left; }
+.score-rankings-head > span:nth-child(3) { text-align:right; }
+.score-rankings-head > span:nth-child(4) { text-align:left; }
+.score-rank-row > .rank-score { text-align:right;justify-self:stretch; }
+.score-rank-row > .rank-movement { justify-self:start; }
+.podium-place-1 { transform:translateY(-48px); }
+.podium-place-2 { transform:translateY(-18px); }
+.podium-place-3 { transform:translateY(8px); }
+@media (max-width:700px) {
+  .podium-place-1 { transform:translateY(-24px); }
+  .podium-place-2 { transform:translateY(-8px); }
+  .podium-place-3 { transform:translateY(6px); }
+}
 
 /* MVP enxuto: cadastros, inscrições e placar automático */
 .loading-screen { min-height:100vh;display:grid;place-items:center;color:#61708a;font-size:14px;font-weight:650; }
