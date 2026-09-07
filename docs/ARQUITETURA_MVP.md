@@ -3,16 +3,27 @@
 O Placar Comercial Capacity usa quatro camadas:
 
 1. **Site privado:** frontend da gestão e do placar da TV.
-2. **Proxy `/api/integration`:** intermediário seguro; mantém o segredo compartilhado apenas no runtime do Site e encaminha as chamadas ao backend.
-3. **Google Apps Script:** backend e camada de regras, validações, cálculos, publicação e auditoria.
-4. **Google Sheets:** base de dados oficial.
+2. **Proxy `/api/integration`:** intermediário seguro; mantém o segredo compartilhado apenas no runtime e encaminha chamadas ao backend.
+3. **Google Apps Script:** backend de regras, validações, persistência, ranking e auditoria.
+4. **Google Sheets:** base oficial de dados.
 
-O Google Apps Script é implantado como Web App de backend. Ele não hospeda as interfaces HTML do produto. O navegador nunca recebe `APPS_SCRIPT_SHARED_SECRET`.
+O Apps Script é publicado somente como Web App JSON. Ele não hospeda as telas do produto. O navegador chama o proxy do Site e nunca recebe `APPS_SCRIPT_SHARED_SECRET`.
 
-## Fluxo vertical entregue
+## Fluxo oficial
 
-`Registrar inscrição` → pendência → prévia calculada no servidor → publicação protegida por `LockService` → atualização de `PUBLICACOES`, `PLACAR_PUBLICADO` e `PUBLICADO_NA_VERSAO` → leitura da nova versão pela TV.
+`Participante` → `Produto` → `Inscrição` → `Ranking recalculado no servidor` → `TV atualizada automaticamente`.
 
-Cancelamentos mínimos também passam pelo backend: solicitação, aprovação/rejeição, reversão, auditoria e publicação posterior da reversão.
+O ranking é a soma das inscrições ativas por participante. Criar ou editar uma inscrição altera o ranking imediatamente; excluir uma inscrição é uma exclusão lógica e a retira do total. A TV lê apenas o `bootstrap` calculado pelo servidor, preserva os últimos dados válidos em falhas transitórias e verifica atualizações a cada 15 segundos.
 
-O fallback demonstrativo permanece disponível e é indicado visualmente quando a integração não estiver configurada ou falhar.
+Não fazem parte do MVP as telas ou regras de equipes, gincanas, associações, aprovação, prévia, publicação manual, versões ou snapshot em `PLACAR_PUBLICADO`. As abas antigas permanecem na planilha apenas como legado estrutural e não participam do fluxo ativo.
+
+## Dados vazios e falhas
+
+Uma resposta válida com listas vazias significa **base vazia**, não falha. O frontend mostra estados vazios e mantém o status conectado. Erro de rede, autorização ou backend é mostrado como **erro de conexão**. Não existe fallback com dados fictícios.
+
+## Exclusões
+
+- Participantes e produtos sem histórico podem ser excluídos fisicamente.
+- Participantes e produtos com qualquer lançamento são desativados e preservados para auditoria.
+- Inscrições são excluídas logicamente com `STATUS = EXCLUIDO`.
+- Toda criação, edição, ativação, desativação ou exclusão gera registro em `AUDITORIA`.

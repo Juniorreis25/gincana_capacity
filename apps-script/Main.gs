@@ -1,11 +1,5 @@
 function doGet(e) {
-  var action = e && e.parameter && e.parameter.action ? e.parameter.action : 'publishedScoreboard';
-  if (action !== 'publishedScoreboard') return json_(fail_('ACTION_NOT_ALLOWED', 'Use POST para operações administrativas.'));
-  try {
-    return json_(ok_(bootstrap_().published));
-  } catch (error) {
-    return json_(fail_('READ_FAILED', error.message));
-  }
+  return json_(fail_('ACTION_NOT_ALLOWED', 'Use o proxy privado do painel para acessar a integração.'));
 }
 
 function doPost(e) {
@@ -17,18 +11,12 @@ function doPost(e) {
   try {
     if (action === 'bootstrap') return json_(ok_(bootstrap_()));
     if (action === 'createLaunch') return json_(ok_(createLaunch_(body)));
-    if (action === 'preview') return json_(ok_(preview_()));
-    if (action === 'publish') return json_(ok_(publish_()));
-    if (action === 'requestCancellation') return json_(ok_(requestCancellation_(body)));
-    if (action === 'approveCancellation') return json_(ok_(approveCancellation_(body)));
-    if (action === 'rejectCancellation') return json_(ok_(rejectCancellation_(body)));
+    if (action === 'updateLaunch') return json_(ok_(updateLaunch_(body)));
+    if (action === 'deleteLaunch') return json_(ok_(deleteLaunch_(body)));
     if (action === 'adminData') return json_(ok_(adminData_()));
-    if (action === 'createTeam' || action === 'updateTeam' || action === 'deleteTeam' || action === 'deactivateTeam') return json_(ok_(adminMutate_('team', action, body)));
-    if (action === 'createParticipant' || action === 'updateParticipant' || action === 'deleteParticipant' || action === 'deactivateParticipant') return json_(ok_(adminMutate_('participant', action, body)));
-    if (action === 'createProduct' || action === 'updateProduct' || action === 'deleteProduct' || action === 'deactivateProduct') return json_(ok_(adminMutate_('product', action, body)));
-    if (action === 'createGame' || action === 'updateGame' || action === 'deleteGame' || action === 'activateGame' || action === 'deactivateGame') return json_(ok_(adminMutate_('game', action, body)));
-    if (action === 'setGameAssociations') return json_(ok_(setGameAssociations_(body)));
-    return json_(ok_(bootstrap_().published));
+    if (action === 'createParticipant' || action === 'updateParticipant' || action === 'deleteParticipant' || action === 'deactivateParticipant' || action === 'activateParticipant') return json_(ok_(adminMutate_('participant', action, body)));
+    if (action === 'createProduct' || action === 'updateProduct' || action === 'deleteProduct' || action === 'deactivateProduct' || action === 'activateProduct') return json_(ok_(adminMutate_('product', action, body)));
+    return json_(fail_('ACTION_NOT_ALLOWED', 'Operação não disponível.'));
   } catch (error) {
     var message = error && error.message ? error.message : String(error);
     var parts = message.split(':');
