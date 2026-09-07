@@ -4,9 +4,19 @@ function bootstrap_() {
   var launches = rows_('LANCAMENTOS');
   var participantById = indexBy_(participantRows, 'ID');
   var productById = indexBy_(productRows, 'ID');
+  var activeParticipantById = participantRows.reduce(function (result, row) {
+    if (isActive_(row.ATIVO)) result[text_(row.ID)] = true;
+    return result;
+  }, {});
+  var activeProductById = productRows.reduce(function (result, row) {
+    if (isActive_(row.ATIVO)) result[text_(row.ID)] = true;
+    return result;
+  }, {});
 
   var totals = launches.filter(function (launch) {
-    return text_(launch.STATUS).toUpperCase() === 'ATIVO';
+    return text_(launch.STATUS).toUpperCase() === 'ATIVO'
+      && activeParticipantById[text_(launch.PARTICIPANTE_ID)]
+      && activeProductById[text_(launch.PRODUTO_ID)];
   }).reduce(function (result, launch) {
     var participantId = text_(launch.PARTICIPANTE_ID);
     result[participantId] = (result[participantId] || 0) + number_(launch.INSCRICOES_DELTA);
@@ -39,7 +49,7 @@ function bootstrap_() {
       quantity: number_(launch.INSCRICOES_DELTA),
       date: dateText_(launch.DATA_OCORRENCIA || launch.CRIADO_EM),
       notes: text_(launch.OBSERVACAO),
-      status: text_(launch.STATUS),
+      status: !activeParticipantById[text_(launch.PARTICIPANTE_ID)] || !activeProductById[text_(launch.PRODUTO_ID)] ? 'INATIVADO' : text_(launch.STATUS),
       createdBy: text_(launch.CRIADO_POR)
     };
   }).sort(function (a, b) {

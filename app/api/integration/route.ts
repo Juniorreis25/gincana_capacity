@@ -3,6 +3,17 @@ type RuntimeEnv = {
   APPS_SCRIPT_SHARED_SECRET?: string;
 };
 
+type BootstrapPayload = {
+  participants: Array<{ id: string }>;
+  history: Array<{ participantId: string; productId: string; status: string }>;
+  products: Array<{ id: string; name: string }>;
+};
+
+type AdminPayload = {
+  participants: Array<{ id: string; active: boolean }>;
+  products: Array<{ id: string; active: boolean }>;
+};
+
 function getRuntimeEnv(): RuntimeEnv {
   // The secret is read only on the server/Worker. It is never bundled into the client.
   const env: Record<string, string | undefined> = typeof process !== 'undefined' && process.env
@@ -51,7 +62,27 @@ export async function POST(request: Request) {
   const text = await upstream.text();
 
   try {
-    return Response.json(JSON.parse(text), { status: upstream.status });
+    const payload = JSON.parse(text) as { ok?: boolean; data?: BootstrapPayload };
+    if (body.action === 'bootstrap' && payload.ok && payload.data) {
+      const adminResponse = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'adminData', token: APPS_SCRIPT_SHARED_SECRET }),
+      });
+      if (adminResponse.ok) {
+        const adminPayload = JSON.parse(await adminResponse.text()) as { ok?: boolean; data?: AdminPayload };
+        if (adminPayload.ok && adminPayload.data) {
+          const activeParticipants = new Set(adminPayload.data.participants.filter((item) => item.active).map((item) => item.id));
+          const activeProducts = new Set(adminPayload.data.products.filter((item) => item.active).map((item) => item.id));
+          payload.data.participants = payload.data.participants.filter((item) => activeParticipants.has(item.id));
+          payload.data.products = payload.data.products.filter((item) => activeProducts.has(item.id));
+          payload.data.history = payload.data.history.map((item) => activeParticipants.has(item.participantId) && activeProducts.has(item.productId)
+            ? item
+            : { ...item, status: 'INATIVADO' });
+        }
+      }
+    }
+    return Response.json(payload, { status: upstream.status });
   } catch {
     return Response.json({ ok: false, error: { code: 'INVALID_UPSTREAM_RESPONSE', message: 'O Apps Script retornou uma resposta inválida.' } }, { status: 502 });
   }

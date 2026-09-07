@@ -13,4 +13,4 @@ Este diretório contém o backend JSON do MVP. O Site privado é o frontend ofic
 
 `bootstrap`, `adminData`, `createLaunch`, `updateLaunch`, `deleteLaunch` e o CRUD/ativação de participantes e produtos.
 
-O ranking é recalculado no Apps Script a cada leitura. O backend não depende de gincana ativa, associações, prévia, versão publicada ou `PLACAR_PUBLICADO`. Uma base vazia retorna listas vazias com sucesso; não há dados demonstrativos de fallback.
+O ranking é recalculado no Apps Script a cada leitura e considera somente inscrições ativas vinculadas a participantes e produtos ativos. Ao desativar um participante ou produto, os lançamentos relacionados permanecem no histórico com situação `INATIVADO`, mas deixam de contabilizar no ranking e no placar. O backend não depende de gincana ativa, associações, prévia, versão publicada ou `PLACAR_PUBLICADO`. Uma base vazia retorna listas vazias com sucesso; não há dados demonstrativos de fallback.
