@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Eye, LayoutDashboard, ListChecks, Medal, Package, Pencil, Plus, RefreshCw, Trash2, UserCheck, Users } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Crown, Eye, LayoutDashboard, ListChecks, Medal, Minus, Package, Pencil, Plus, RefreshCw, Trash2, Trophy, UserCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -212,7 +212,104 @@ function Avatar({ name, url }: { name: string; url?: string }) { return url ? <i
 function today() { return new Date().toISOString().slice(0,10); }
 function formatDate(value: string) { if (!value) return '—'; const date = new Date(value.length === 10 ? `${value}T12:00:00` : value); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-BR'); }
 
+type ScoreMovement = { direction: 'up' | 'down' | 'same' | 'new'; delta: number; previousRegistrations?: number };
+
 function Scoreboard({ ranking, mode, onReload }: { ranking: RankingRow[]; mode: ConnectionMode; onReload: () => Promise<BootstrapData | null> }) {
+  const previousRef = useRef<RankingRow[] | null>(null);
+  const signatureRef = useRef('');
+  const [movements, setMovements] = useState<Record<string, ScoreMovement>>({});
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [newLeader, setNewLeader] = useState(false);
+  const [pulse, setPulse] = useState(false);
   useEffect(() => { const timer = window.setInterval(() => { void onReload(); }, 15000); return () => window.clearInterval(timer); }, [onReload]);
-  return <main className="scoreboard-shell min-h-screen text-white"><header className="scoreboard-header"><div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity"/></div><div><span className="score-brand">Placar comercial</span><h1>Classificação por inscrições</h1></div></div><div className="scoreboard-meta"><strong>{mode === 'error' ? 'Tentando reconectar' : mode === 'loading' ? 'Carregando placar' : 'Atualização automática'}</strong><button className="score-reload" onClick={() => void onReload()}><RefreshCw size={14}/> Recarregar</button></div></header>{mode === 'loading' && !ranking.length ? <section className="scoreboard-content"><div className="score-empty"><RefreshCw size={38}/><h2>Carregando placar…</h2></div></section> : ranking.length ? <section className="scoreboard-list">{ranking.map((person, index) => <article className="scoreboard-row" key={person.id}><span className={`score-position position-${Math.min(index + 1,3)}`}>{index + 1}º</span><Avatar name={person.name} url={person.avatarUrl}/><h2>{person.name}</h2><strong>{person.registrations}<small> inscrições</small></strong></article>)}</section> : <section className="scoreboard-content"><div className="score-empty"><Medal size={42}/><h2>Placar ainda sem inscrições</h2><p>Os registros aparecerão aqui automaticamente.</p></div></section>}<footer className="score-ticker"><span className="live-dot"/><strong>Atualização automática</strong><p>{ranking[0] ? `${ranking[0].name} está na liderança com ${ranking[0].registrations} inscrições.` : 'Aguardando a primeira inscrição.'}</p></footer></main>;
+  useEffect(() => {
+    const signature = ranking.map((person) => `${person.id}:${person.registrations}`).join('|');
+    if (signature === signatureRef.current) return;
+    const previous = previousRef.current;
+    if (previous) {
+      const next: Record<string, ScoreMovement> = {};
+      ranking.forEach((person, index) => {
+        const oldIndex = previous.findIndex((item) => item.id === person.id);
+        const old = previous.find((item) => item.id === person.id);
+        if (oldIndex < 0) next[person.id] = { direction: 'new', delta: 0, previousRegistrations: 0 };
+        else next[person.id] = { direction: oldIndex > index ? 'up' : oldIndex < index ? 'down' : 'same', delta: oldIndex - index, previousRegistrations: old.registrations };
+      });
+      setMovements(next);
+      const leaderChanged = Boolean(previous.length && ranking.length && previous[0].id !== ranking[0].id);
+      setNewLeader(leaderChanged);
+      setPulse(true);
+      const pulseTimer = window.setTimeout(() => { setPulse(false); setNewLeader(false); }, 4200);
+      return () => window.clearTimeout(pulseTimer);
+    }
+    previousRef.current = ranking;
+    signatureRef.current = signature;
+    setLastUpdated(new Date());
+  }, [ranking]);
+  useEffect(() => {
+    if (signatureRef.current === ranking.map((person) => `${person.id}:${person.registrations}`).join('|')) return;
+    signatureRef.current = ranking.map((person) => `${person.id}:${person.registrations}`).join('|');
+    previousRef.current = ranking;
+    setLastUpdated(new Date());
+  }, [ranking]);
+
+  const total = ranking.reduce((sum, person) => sum + person.registrations, 0);
+  const podium = [ranking[1], ranking[0], ranking[2]].filter(Boolean);
+  const rest = ranking.slice(3, 13);
+  const motivation = scoreboardMotivation(ranking, movements, newLeader);
+  const connectionLabel = mode === 'error' ? 'Conexão instável' : mode === 'loading' ? 'Conectando' : 'Conectado';
+  const updatedLabel = lastUpdated ? lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+
+  return <main className="scoreboard-shell min-h-screen text-white">
+    <header className="scoreboard-header">
+      <div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity"/></div><div><span className="score-brand">Gincana Comercial Capacity</span><h1>Ranking ao vivo</h1></div></div>
+      <div className="scoreboard-stats"><div><strong>{total}</strong><span>Total de inscrições</span></div><div><strong>{ranking.length}</strong><span>Participantes</span></div><div><strong>{updatedLabel}</strong><span>Última atualização</span></div></div>
+      <div className="scoreboard-controls"><span className={`score-connection ${mode}`}><i/> {connectionLabel}</span><button className="score-reload" onClick={() => void onReload()} aria-label="Recarregar placar"><RefreshCw size={14}/> Atualizar</button></div>
+    </header>
+    {mode === 'loading' && !ranking.length ? <section className="scoreboard-empty-screen"><div className="score-empty"><RefreshCw size={38}/><h2>Carregando ranking…</h2><p>Buscando os resultados mais recentes.</p></div></section> : ranking.length ? <section className={`scoreboard-main ${pulse ? 'scoreboard-pulse' : ''}`}>
+      {newLeader && <div className="leader-alert"><Crown size={17}/> Nova liderança: <strong>{ranking[0].name}</strong></div>}
+      <div className="scoreboard-intro"><div><span className="score-eyebrow">Classificação atual</span><h2>Quem está na frente</h2></div><p>{motivation}</p></div>
+      <div className="scoreboard-grid">
+        <section className="podium-deck" aria-label="Pódio">
+          {podium.map((person) => { const position = ranking.findIndex((item) => item.id === person.id) + 1; const movement = movements[person.id]; const tied = ranking.some((item) => item.id !== person.id && item.registrations === person.registrations); return <PodiumCard key={person.id} person={person} position={position} movement={movement} tied={tied}/>; })}
+        </section>
+        {rest.length > 0 && <section className="score-rankings" aria-label="Demais participantes"><div className="score-rankings-head"><span>Posição</span><span>Participante</span><span>Inscrições</span><span>Movimento</span></div>{rest.map((person, index) => { const position = index + 4; const above = ranking[position - 2]; const movement = movements[person.id]; const gap = above ? Math.max(above.registrations - person.registrations, 0) : 0; return <RankingLine key={person.id} person={person} position={position} movement={movement} gap={gap} tied={Boolean(above && above.registrations === person.registrations)}/>; })}</section>}
+      </div>
+    </section> : <section className="scoreboard-empty-screen"><div className="score-empty"><Trophy size={48}/><h2>A competição vai começar</h2><p>As primeiras inscrições aparecerão aqui.</p></div></section>}
+    <footer className="score-ticker"><span className="live-dot"/><strong>Atualização automática a cada 15s</strong><p>{ranking[0] ? `${ranking[0].name} lidera com ${ranking[0].registrations} inscrições.` : 'Aguardando a primeira inscrição.'}</p><span>Placar comercial Capacity</span></footer>
+  </main>;
+}
+
+function PodiumCard({ person, position, movement, tied }: { person: RankingRow; position: number; movement?: ScoreMovement; tied: boolean }) {
+  const isLeader = position === 1;
+  return <article className={`podium-card podium-place-${position} ${movement?.direction && movement.direction !== 'same' ? `movement-${movement.direction}` : ''}`}>
+    <div className="podium-rank"><span>{position}º</span>{isLeader ? <Crown size={18}/> : <span className="podium-medal">{position === 2 ? '02' : '03'}</span>}</div>
+    <Avatar name={person.name} url={person.avatarUrl}/><h3>{person.name}</h3>{isLeader && <span className="leader-tag">Líder</span>}{tied && <span className="podium-tie">Empate</span>}
+    <AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/><span className="podium-caption">inscrições</span>
+  </article>;
+}
+
+function RankingLine({ person, position, movement, gap, tied }: { person: RankingRow; position: number; movement?: ScoreMovement; gap: number; tied: boolean }) {
+  const label = movement?.direction === 'up' ? `Subiu ${movement.delta} ${movement.delta === 1 ? 'posição' : 'posições'}` : movement?.direction === 'down' ? `Caiu ${Math.abs(movement.delta)} ${Math.abs(movement.delta) === 1 ? 'posição' : 'posições'}` : tied ? 'Empate' : gap > 0 ? `Faltam ${gap} para subir` : 'Manteve';
+  return <article className={`score-rank-row movement-${movement?.direction || 'same'}`}><strong className="rank-number">{position}º</strong><div className="rank-person"><Avatar name={person.name} url={person.avatarUrl}/><strong>{person.name}</strong></div><strong className="rank-score"><AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/><small> inscrições</small></strong><span className={`rank-movement ${movement?.direction || 'same'}`}>{movement?.direction === 'up' ? <ArrowUp size={14}/> : movement?.direction === 'down' ? <ArrowDown size={14}/> : <Minus size={14}/>} {label}</span></article>;
+}
+
+function AnimatedCount({ value, from }: { value: number; from?: number }) {
+  const [display, setDisplay] = useState(from ?? value);
+  useEffect(() => {
+    if (from === undefined || from === value) { setDisplay(value); return; }
+    const started = performance.now(); const duration = 650; let frame = 0;
+    const tick = (now: number) => { const progress = Math.min((now - started) / duration, 1); setDisplay(Math.round((from + (value - from) * (1 - Math.pow(1 - progress, 3))))); if (progress < 1) frame = requestAnimationFrame(tick); };
+    frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame);
+  }, [from, value]);
+  return <>{display}</>;
+}
+
+function scoreboardMotivation(ranking: RankingRow[], movements: Record<string, ScoreMovement>, newLeader: boolean) {
+  if (newLeader && ranking[0]) return `Nova liderança de ${ranking[0].name}`;
+  if (ranking[1] && ranking[2] && ranking[1].registrations === ranking[2].registrations) return 'Empate acirrado na disputa pelo pódio';
+  if (ranking[1] && ranking[2] && ranking[1].registrations - ranking[2].registrations <= 1) return `Apenas ${ranking[1].registrations - ranking[2].registrations || 1} inscrição separa o 2º do 3º lugar`;
+  const biggestAdvance = Object.values(movements).filter((item) => item.direction === 'up').sort((a, b) => b.delta - a.delta)[0];
+  if (biggestAdvance) return 'Maior avanço da rodada';
+  if (ranking[3] && ranking[2]) return `Faltam ${Math.max(ranking[2].registrations - ranking[3].registrations, 1)} inscrições para alcançar o pódio`;
+  return 'Disputa acirrada pelo pódio';
 }
