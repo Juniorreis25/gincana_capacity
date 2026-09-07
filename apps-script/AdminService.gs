@@ -85,15 +85,25 @@ function setGameAssociations_(input) {
   var gameId = text_(input.gameId); if (!gameId) throw new Error('INVALID_GAME: Gincana obrigatória.');
   var lock = LockService.getScriptLock(); lock.waitLock(10000);
   try {
-    var participantIds = input.participantIds || []; var productIds = input.productIds || [];
+    var game = rows_('GINCANAS').find(function (row) { return text_(row.ID) === gameId; });
+    if (!game) throw new Error('INVALID_GAME: Gincana não encontrada.');
+    var participantIds = normalizedIds_(input.participantIds); var productIds = normalizedIds_(input.productIds);
+    var participants = rows_('PARTICIPANTES'); var products = rows_('PRODUTOS');
+    participantIds.forEach(function (id) { if (!participants.some(function (row) { return text_(row.ID) === id && isActive_(row.ATIVO); })) throw new Error('INVALID_PARTICIPANT: Participante inválida ou inativa.'); });
+    productIds.forEach(function (id) { if (!products.some(function (row) { return text_(row.ID) === id && isActive_(row.ATIVO); })) throw new Error('INVALID_PRODUCT: Produto inválido ou inativo.'); });
     rows_('GINCANA_PARTICIPANTES').filter(function (row) { return text_(row.GINCANA_ID) === gameId && isActive_(row.ATIVO); }).forEach(function (row) { updateObjectById_('GINCANA_PARTICIPANTES', text_(row.ID), { ATIVO: 'NAO' }); });
     rows_('GINCANA_PRODUTOS').filter(function (row) { return text_(row.GINCANA_ID) === gameId && isActive_(row.ATIVO); }).forEach(function (row) { updateObjectById_('GINCANA_PRODUTOS', text_(row.ID), { ATIVO: 'NAO' }); });
-    var participants = rows_('PARTICIPANTES'); var products = rows_('PRODUTOS');
     participantIds.forEach(function (id) { var person = participants.find(function (row) { return text_(row.ID) === text_(id) && isActive_(row.ATIVO); }); if (person) appendObject_('GINCANA_PARTICIPANTES', { ID: Utilities.getUuid(), GINCANA_ID: gameId, PARTICIPANTE_ID: id, EQUIPE_ID_SNAPSHOT: text_(person.EQUIPE_ID), META_INDIVIDUAL: '', ATIVO: 'SIM' }); });
     productIds.forEach(function (id) { var product = products.find(function (row) { return text_(row.ID) === text_(id) && isActive_(row.ATIVO); }); if (product) appendObject_('GINCANA_PRODUTOS', { ID: Utilities.getUuid(), GINCANA_ID: gameId, PRODUTO_ID: id, PONTOS_POR_INSCRICAO: number_(product.PONTOS_POR_UNIDADE), ATIVO: 'SIM' }); });
     auditAdmin_('ASSOCIAR', 'game', gameId, {}, { participants: participantIds, products: productIds });
+    SpreadsheetApp.flush();
     return adminData_();
   } finally { lock.releaseLock(); }
+}
+
+function normalizedIds_(value) {
+  var values = Array.isArray(value) ? value : (value === null || value === undefined || value === '' ? [] : [value]);
+  return values.map(function (item) { return text_(item); }).filter(Boolean).filter(function (item, index, all) { return all.indexOf(item) === index; });
 }
 
 function auditAdmin_(action, entity, id, before, after) { appendObject_('AUDITORIA', { ID: Utilities.getUuid(), ACAO: action, ENTIDADE: entity, ENTIDADE_ID: id, ANTES_JSON: JSON.stringify(before || {}), DEPOIS_JSON: JSON.stringify(after || {}), USUARIO: 'painel.supervisora', DATA_HORA: new Date() }); }
