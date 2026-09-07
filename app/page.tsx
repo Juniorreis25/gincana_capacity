@@ -92,6 +92,7 @@ export default function Home() {
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [adminData, setAdminData] = useState<AdminData>({ teams: [], participants: [], products: [], games: [] });
+  const [activeGameName, setActiveGameName] = useState('Nenhuma gincana ativa');
 
   const total = useMemo(() => ranking.reduce((sum, person) => sum + person.registrations, 0), [ranking]);
   const pendingCancellations = useMemo(() => cancellations.filter((item) => item.status === 'PENDENTE').length, [cancellations]);
@@ -112,6 +113,7 @@ export default function Home() {
       registrations: person.registrations,
       progress: person.progress ?? Math.min(100, person.registrations * 5),
     }));
+    setActiveGameName(bootstrap.activeGame?.name || 'Nenhuma gincana ativa');
     setRanking(liveRanking);
     if (bootstrap.products.length) {
       const liveProducts = bootstrap.products.map((item) => ({ ...item, name: item.name.replace(/^\[DEMO\]\s*/i, '') })).filter((item) => item.name);
@@ -283,7 +285,7 @@ export default function Home() {
 
         <section className="main-panel">
           <header className="topbar">
-            <div><div className="topbar-kicker"><p className="eyebrow">{page === 'dashboard' ? 'Temporada ativa' : 'Gestão da competição'}</p><span className={`integration-badge ${integrationMode}`} aria-live="polite">{integrationMode === 'live' ? 'Conectado à planilha' : integrationMode === 'demo' || integrationMode === 'error' ? 'Modo demonstração' : 'Conectando à planilha…'}</span></div><h1>{pageNames[page]}</h1></div>
+            <div><div className="topbar-kicker"><p className="eyebrow">{page === 'dashboard' ? (activeGameName === 'Nenhuma gincana ativa' ? 'Base conectada' : 'Temporada ativa') : 'Gestão da competição'}</p><span className={`integration-badge ${integrationMode}`} aria-live="polite">{integrationMode === 'live' ? 'Conectado à planilha' : integrationMode === 'demo' || integrationMode === 'error' ? 'Modo demonstração' : 'Conectando à planilha…'}</span></div><h1>{page === 'dashboard' ? activeGameName : pageNames[page]}</h1></div>
             <div className="topbar-actions">
               <Button variant="outline" className="rounded-full" onClick={openScoreboard}><Eye size={17} /> Ver placar da TV</Button>
               <Button className="primary-action rounded-full" onClick={() => setRegisterOpen(true)}><Plus size={18} /> Registrar inscrição</Button>
@@ -318,7 +320,7 @@ function Dashboard({ ranking, pending, pendingTotal, pendingParticipants, total,
 
     <section className="metrics-grid" aria-label="Indicadores da gincana">
       <Metric label="Inscrições confirmadas" value={String(total)} detail="de 120 na meta coletiva" icon={<ListChecks />} />
-      <Metric label="Participantes ativas" value="9" detail="em 3 equipes" icon={<Users />} />
+      <Metric label="Participantes ativas" value={String(ranking.length)} detail={ranking.length ? `${new Set(ranking.map((person) => person.team)).size} equipes` : 'Base conectada e vazia'} icon={<Users />} />
       <Metric label="Líder atual" value={ranking[0]?.name || 'Ainda não definido'} detail={ranking[0] ? `${ranking[0].registrations} inscrições` : 'Aguardando dados'} icon={<Medal />} featured />
       <Metric label="Dias restantes" value="18" detail="encerra em 24 de setembro" icon={<Clock3 />} />
     </section>
@@ -330,7 +332,7 @@ function Dashboard({ ranking, pending, pendingTotal, pendingParticipants, total,
       </article>
       <aside className="right-stack">
         <article className="panel-card goal-card"><p className="eyebrow">Meta coletiva</p><div className="goal-number"><strong>{((total / 120) * 100).toFixed(1).replace('.', ',')}%</strong><span>{total} de 120</span></div><Progress value={(total / 120) * 100} className="goal-progress" /><p>Faltam <strong>{Math.max(0, 120 - total)} inscrições</strong> para a equipe alcançar a meta.</p></article>
-        <article className="panel-card activity-card"><div className="card-heading"><div><p className="eyebrow">Agora na disputa</p><h2>Últimas conquistas</h2></div></div><Activity /></article>
+        <article className="panel-card activity-card"><div className="card-heading"><div><p className="eyebrow">Agora na disputa</p><h2>Últimas conquistas</h2></div></div>{ranking.length ? <Activity /> : <div className="empty-state"><p>Ainda não há movimentações na base conectada.</p></div>}</article>
       </aside>
     </section>
   </>;
