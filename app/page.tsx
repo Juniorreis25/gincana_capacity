@@ -267,7 +267,7 @@ function Scoreboard({ ranking, mode, onReload }: { ranking: RankingRow[]; mode: 
     </header>
     {mode === 'loading' && !ranking.length ? <section className="scoreboard-empty-screen"><div className="score-empty"><RefreshCw size={38}/><h2>Carregando ranking…</h2><p>Buscando os resultados mais recentes.</p></div></section> : ranking.length ? <section className={`scoreboard-main ${pulse ? 'scoreboard-pulse' : ''}`}>
       {newLeader && <div className="leader-alert"><Crown size={17}/> Nova liderança: <strong>{ranking[0].name}</strong></div>}
-      <div className="scoreboard-intro"><div><span className="score-eyebrow">Classificação atual</span><h2>Quem está na frente</h2></div><p>{motivation}</p></div>
+      <div className="scoreboard-intro"><div><h2>Classificação atual</h2></div><p>{motivation}</p></div>
       <div className="scoreboard-grid">
         <section className="podium-deck" aria-label="Pódio">
           {podium.map((person) => { const position = ranking.findIndex((item) => item.id === person.id) + 1; const movement = movements[person.id]; const tied = ranking.some((item) => item.id !== person.id && item.registrations === person.registrations); return <PodiumCard key={person.id} person={person} position={position} movement={movement} tied={tied}/>; })}
@@ -282,7 +282,7 @@ function Scoreboard({ ranking, mode, onReload }: { ranking: RankingRow[]; mode: 
 function PodiumCard({ person, position, movement, tied }: { person: RankingRow; position: number; movement?: ScoreMovement; tied: boolean }) {
   const isLeader = position === 1;
   return <article className={`podium-card podium-place-${position} ${movement?.direction && movement.direction !== 'same' ? `movement-${movement.direction}` : ''}`}>
-    <div className="podium-rank"><span>{position}º</span>{isLeader ? <Crown size={18}/> : <span className="podium-medal">{position === 2 ? '02' : '03'}</span>}</div>
+    <div className="podium-rank"><span>{position}º</span>{isLeader ? <Crown size={18}/> : null}</div>
     <Avatar name={person.name} url={person.avatarUrl}/><h3>{person.name}</h3>{isLeader && <span className="leader-tag">Líder</span>}{tied && <span className="podium-tie">Empate</span>}
     <AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/><span className="podium-caption">inscrições</span>
   </article>;
@@ -290,7 +290,7 @@ function PodiumCard({ person, position, movement, tied }: { person: RankingRow; 
 
 function RankingLine({ person, position, movement, gap, tied }: { person: RankingRow; position: number; movement?: ScoreMovement; gap: number; tied: boolean }) {
   const label = movement?.direction === 'up' ? `Subiu ${movement.delta} ${movement.delta === 1 ? 'posição' : 'posições'}` : movement?.direction === 'down' ? `Caiu ${Math.abs(movement.delta)} ${Math.abs(movement.delta) === 1 ? 'posição' : 'posições'}` : tied ? 'Empate' : gap > 0 ? `Faltam ${gap} para subir` : 'Manteve';
-  return <article className={`score-rank-row movement-${movement?.direction || 'same'}`}><strong className="rank-number">{position}º</strong><div className="rank-person"><Avatar name={person.name} url={person.avatarUrl}/><strong>{person.name}</strong></div><strong className="rank-score"><AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/><small> inscrições</small></strong><span className={`rank-movement ${movement?.direction || 'same'}`}>{movement?.direction === 'up' ? <ArrowUp size={14}/> : movement?.direction === 'down' ? <ArrowDown size={14}/> : <Minus size={14}/>} {label}</span></article>;
+  return <article className={`score-rank-row movement-${movement?.direction || 'same'}`}><strong className="rank-number">{position}º</strong><div className="rank-person"><Avatar name={person.name} url={person.avatarUrl}/><strong>{person.name}</strong></div><strong className="rank-score"><AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/></strong><span className={`rank-movement ${movement?.direction || 'same'}`}>{movement?.direction === 'up' ? <ArrowUp size={14}/> : movement?.direction === 'down' ? <ArrowDown size={14}/> : <Minus size={14}/>} {label}</span></article>;
 }
 
 function AnimatedCount({ value, from }: { value: number; from?: number }) {
@@ -310,6 +310,5 @@ function scoreboardMotivation(ranking: RankingRow[], movements: Record<string, S
   if (ranking[1] && ranking[2] && ranking[1].registrations - ranking[2].registrations <= 1) return `Apenas ${ranking[1].registrations - ranking[2].registrations || 1} inscrição separa o 2º do 3º lugar`;
   const biggestAdvance = Object.values(movements).filter((item) => item.direction === 'up').sort((a, b) => b.delta - a.delta)[0];
   if (biggestAdvance) return 'Maior avanço da rodada';
-  if (ranking[3] && ranking[2]) return `Faltam ${Math.max(ranking[2].registrations - ranking[3].registrations, 1)} inscrições para alcançar o pódio`;
   return 'Disputa acirrada pelo pódio';
 }
