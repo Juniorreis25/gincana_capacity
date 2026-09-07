@@ -131,7 +131,7 @@ export default function Home() {
         <div className="content-wrap">
           {message && <p className={messageIsError ? 'success-banner error' : 'success-banner'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
           {mode === 'error' && <ConnectionError onRetry={() => { void refreshAll().catch(() => undefined); }} />}
-          {page === 'dashboard' && <Dashboard participants={adminData.participants.filter((item) => item.active).length} products={adminData.products.filter((item) => item.active).length} total={totalRegistrations} leader={bootstrap.participants[0]} history={bootstrap.history} onRegister={openNewEnrollment} onScoreboard={openScoreboard} />}
+          {page === 'dashboard' && <Dashboard participants={adminData.participants.filter((item) => item.active).length} products={adminData.products.filter((item) => item.active).length} total={totalRegistrations} leader={bootstrap.participants[0]} history={bootstrap.history} />}
           {page === 'participants' && <ParticipantsView data={adminData} onMutate={mutate} />}
           {page === 'products' && <ProductsView data={adminData} onMutate={mutate} />}
           {page === 'enrollments' && <EnrollmentsView history={bootstrap.history} onNew={openNewEnrollment} onEdit={(row) => { setEditingEnrollment(row); setEnrollmentOpen(true); }} onDeleted={async (id) => { setBootstrap(await deleteLaunch(id)); setMessageIsError(false); setMessage('Inscrição excluída. O placar foi atualizado.'); }} />}
@@ -151,19 +151,18 @@ function LoadingScreen() { return <main className="loading-screen"><img src="/ca
 
 function ConnectionError({ onRetry }: { onRetry: () => void }) { return <section className="connection-error"><div><strong>Não foi possível acessar a planilha.</strong><span>Os últimos dados válidos foram mantidos. Tente novamente.</span></div><Button variant="outline" onClick={onRetry}><RefreshCw size={16}/> Tentar novamente</Button></section>; }
 
-function Dashboard({ participants, products, total, leader, history, onRegister, onScoreboard }: { participants: number; products: number; total: number; leader?: RankingRow; history: EnrollmentRow[]; onRegister: () => void; onScoreboard: () => void }) {
+function Dashboard({ participants, products, total, leader, history }: { participants: number; products: number; total: number; leader?: RankingRow; history: EnrollmentRow[] }) {
   return <div className="simple-dashboard">
     <section className="metrics-grid simple-metrics">
       <Metric label="Participantes ativos" value={String(participants)} icon={<UserCheck/>}/><Metric label="Produtos ativos" value={String(products)} icon={<Package/>}/><Metric label="Total de inscrições" value={String(total)} icon={<ListChecks/>}/><Metric label="Líder atual" value={leader?.name || 'Ainda não definido'} detail={leader ? `${leader.registrations} inscrições` : 'Aguardando registros'} icon={<Medal/>} featured/>
     </section>
-    <section className="quick-actions panel-card"><div><p className="eyebrow">Ações rápidas</p><h2>O essencial, em poucos cliques</h2></div><div><Button className="primary-action" onClick={onRegister}><Plus size={17}/> Registrar inscrição</Button><Button variant="outline" onClick={onScoreboard}><Eye size={17}/> Ver placar da TV</Button></div></section>
     <RecentEnrollments history={history.slice(0, 6)} />
   </div>;
 }
 
 function Metric({ label, value, detail, icon, featured = false }: { label: string; value: string; detail?: string; icon: React.ReactNode; featured?: boolean }) { return <article className={featured ? 'metric-card featured' : 'metric-card'}><div className="metric-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</div></article>; }
 
-function RecentEnrollments({ history }: { history: EnrollmentRow[] }) { return <section className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Atividade recente</p><h2>Últimos registros</h2></div></div>{history.length ? <div className="simple-table">{history.map((row) => <div className="simple-row" key={row.id}><span>{formatDate(row.date)}</span><strong>{row.participant}</strong><span>{row.product}</span><b>{row.quantity}</b><em className={row.status === 'ATIVO' ? 'active' : ''}>{row.status === 'ATIVO' ? 'Ativa' : 'Excluída'}</em></div>)}</div> : <EmptyState text="Nenhuma inscrição registrada."/>}</section>; }
+function RecentEnrollments({ history }: { history: EnrollmentRow[] }) { return <section className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Atividade recente</p></div></div>{history.length ? <div className="simple-table"><div className="simple-table-head" aria-hidden="true"><span>Data</span><span>Participante</span><span>Produto</span><span>Nº de inscrições</span><span>Status</span></div>{history.map((row) => <div className="simple-row" key={row.id}><span>{formatDate(row.date)}</span><strong>{row.participant}</strong><span>{row.product}</span><b>{row.quantity}</b><em className={row.status === 'ATIVO' ? 'active' : ''}>{row.status === 'ATIVO' ? 'Ativa' : 'Excluída'}</em></div>)}</div> : <EmptyState text="Nenhuma inscrição registrada."/>}</section>; }
 
 function ParticipantsView({ data, onMutate }: { data: AdminData; onMutate: (action: string, input: Record<string, unknown>, success: string) => Promise<void> }) {
   const [editing, setEditing] = useState<AdminData['participants'][number] | null>(null); const [open, setOpen] = useState(false); const [confirm, setConfirm] = useState<AdminData['participants'][number] | null>(null);
