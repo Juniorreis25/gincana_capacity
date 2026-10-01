@@ -10,11 +10,14 @@ import {
   adminMutation,
   createLaunch,
   deleteLaunch,
+  getCampaign,
   loadAdminData,
   loadBootstrap,
+  listCampaigns,
   startNewCampaign,
   updateLaunch,
   type AdminData,
+  type ArchivedCampaign,
   type BootstrapData,
   type ConnectionMode,
   type EnrollmentRow,
@@ -38,6 +41,7 @@ export default function Home() {
   const [enrollmentOpen, setEnrollmentOpen] = useState(false);
   const [editingEnrollment, setEditingEnrollment] = useState<EnrollmentRow | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  const [campaigns, setCampaigns] = useState<ArchivedCampaign[]>([]);
 
   useEffect(() => {
     setView(new URLSearchParams(window.location.search).get('view') === 'scoreboard' ? 'scoreboard' : 'admin');
@@ -49,6 +53,7 @@ export default function Home() {
       const [live, admin] = await Promise.all([loadBootstrap(), loadAdminData()]);
       setBootstrap(live);
       setAdminData(admin);
+      setCampaigns(live.campaign === undefined ? [] : await listCampaigns().catch(() => []));
       setMode('live');
       return live;
     } catch (error) {
@@ -73,9 +78,10 @@ export default function Home() {
     if (!routeReady) return;
     const controller = new AbortController();
     setMode('loading');
-    void Promise.all([loadBootstrap(controller.signal), loadAdminData(controller.signal)]).then(([live, admin]) => {
+    void Promise.all([loadBootstrap(controller.signal), loadAdminData(controller.signal)]).then(async ([live, admin]) => {
       setBootstrap(live);
       setAdminData(admin);
+      setCampaigns(live.campaign === undefined ? [] : await listCampaigns(controller.signal).catch(() => []));
       setMode('live');
     }).catch((error: unknown) => {
       if (!(error instanceof DOMException && error.name === 'AbortError')) setMode('error');
@@ -138,7 +144,7 @@ export default function Home() {
           {page === 'participants' && <ParticipantsView data={adminData} onMutate={mutate} />}
           {page === 'products' && <ProductsView data={adminData} onMutate={mutate} />}
           {page === 'enrollments' && <EnrollmentsView history={bootstrap.history} onNew={openNewEnrollment} onEdit={(row) => { setEditingEnrollment(row); setEnrollmentOpen(true); }} onDeleted={async (id) => { setBootstrap(await deleteLaunch(id)); setMessageIsError(false); setMessage('Inscrição excluída. O placar foi atualizado.'); }} />}
-          {page === 'archive' && <ArchiveView />}
+          {page === 'archive' && <ArchiveView campaigns={campaigns} apiReady={bootstrap.campaign !== undefined} onLoadCampaign={getCampaign} />}
         </div>
       </section>
     </main>
@@ -148,6 +154,7 @@ export default function Home() {
         const result = await startNewCampaign(input);
         setBootstrap(result.bootstrap);
         setAdminData(result.adminData);
+        setCampaigns(result.campaigns);
         setNewCampaignOpen(false);
         setPage('archive');
         setMessageIsError(false);
@@ -190,10 +197,24 @@ function enrollmentStatus(row: EnrollmentRow) {
 
 function RecentEnrollments({ history }: { history: EnrollmentRow[] }) { return <section className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Atividade recente</p></div></div>{history.length ? <div className="simple-table"><div className="simple-table-head" aria-hidden="true"><span>Data</span><span>Participante</span><span>Produto</span><span>Nº de inscrições</span><span>Status</span></div>{history.map((row) => { const status = enrollmentStatus(row); return <div className="simple-row" key={row.id}><span>{formatDate(row.date)}</span><strong>{row.participant}</strong><span>{row.product}</span><b>{row.quantity}</b><em className={status.className}>{status.label}</em></div>; })}</div> : <EmptyState text="Nenhuma inscrição registrada."/>}</section>; }
 
-function ArchiveView() {
+function ArchiveView({ campaigns, apiReady, onLoadCampaign }: { campaigns: ArchivedCampaign[]; apiReady: boolean; onLoadCampaign: (id: string) => Promise<{ campaign: { name: string; startDate?: string; endDate?: string }; ranking: RankingRow[] }> }) {
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState('');
+  const [selectedId, setSelectedId] = useState('');
+  const [selected, setSelected] = useState<{ name: string; startDate?: string; endDate?: string; ranking: RankingRow[] } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const years = Array.from(new Set(campaigns.map((campaign) => campaign.startDate?.slice(0, 4)).filter(Boolean))).sort().reverse();
+  const filtered = campaigns.filter((campaign) => (!month || campaign.startDate?.slice(5, 7) === month) && (!year || campaign.startDate?.slice(0, 4) === year));
+  const openCampaign = async (id: string) => {
+    setSelectedId(id); setLoading(true);
+    try { const result = await onLoadCampaign(id); setSelected({ ...result.campaign, ranking: result.ranking }); } finally { setLoading(false); }
+  };
   return <section className="panel-card list-page archive-page">
-    <div className="list-page-head"><div><p className="eyebrow">Histórico de campanhas</p><h2>Arquivo</h2></div><span className="integration-badge demo">Prévia local</span></div>
-    <div className="archive-intro"><Archive size={22}/><div><strong>Nenhuma campanha arquivada</strong><p>Quando uma campanha for encerrada, o placar geral será salvo aqui para consulta por mês e ano. Participantes serão preservados para a próxima campanha.</p></div></div>
+    <div className="list-page-head"><div><p className="eyebrow">Histórico de campanhas</p><h2>Arquivo</h2></div>{!apiReady && <span className="integration-badge demo">Prévia local</span>}</div>
+    <div className="archive-filters"><label><span>Mês</span><select value={month} onChange={(event) => setMonth(event.target.value)}><option value="">Todos</option>{['01','02','03','04','05','06','07','08','09','10','11','12'].map((value) => <option key={value} value={value}>{new Date(2000, Number(value) - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })}</option>)}</select></label><label><span>Ano</span><select value={year} onChange={(event) => setYear(event.target.value)}><option value="">Todos</option>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
+    {filtered.length ? <div className="archive-list">{filtered.map((campaign) => <button className={selectedId === campaign.id ? 'archive-card selected' : 'archive-card'} key={campaign.id} onClick={() => void openCampaign(campaign.id)}><Archive size={18}/><span><strong>{campaign.name}</strong><small>{formatDate(campaign.startDate || '')} · {campaign.participantCount} participantes · {campaign.totalRegistrations} inscrições</small></span><span className="archive-card-arrow">›</span></button>)}</div> : <div className="archive-intro"><Archive size={22}/><div><strong>{apiReady ? 'Nenhuma campanha arquivada' : 'Arquivo disponível após a integração'}</strong><p>{apiReady ? 'Campanhas encerradas aparecerão aqui para consulta por mês e ano.' : 'A prévia local mantém a estrutura do Arquivo. A leitura real será ativada quando a nova versão do Apps Script estiver publicada.'}</p></div></div>}
+    {loading && <p className="archive-loading">Carregando placar arquivado…</p>}
+    {selected && !loading && <div className="archive-detail"><div className="archive-detail-head"><div><p className="eyebrow">Placar arquivado</p><h3>{selected.name}</h3></div><span>{formatDate(selected.startDate || '')}</span></div>{selected.ranking.length ? <div className="archive-table"><div className="archive-table-row head"><span>Posição</span><span>Participante</span><span>Inscrições</span></div>{selected.ranking.map((person, index) => <div className="archive-table-row" key={person.id}><b>{index + 1}º</b><strong>{person.name}</strong><span>{person.registrations}</span></div>)}</div> : <EmptyState text="Esta campanha não possui placar arquivado."/>}</div>}
   </section>;
 }
 
