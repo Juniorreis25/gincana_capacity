@@ -147,7 +147,7 @@ function listCampaigns_() {
     return status === 'ENCERRADA' || status === 'ARQUIVADA';
   }).map(function (row) {
     var id = text_(row.ID);
-    var snapshot = rows_('PLACAR_PUBLICADO').filter(function (item) { return text_(item.GINCANA_ID) === id; });
+    var snapshot = latestPublishedRows_(id);
     return {
       id: id, name: text_(row.NOME), startDate: dateText_(row.DATA_INICIO), endDate: dateText_(row.DATA_FIM),
       status: text_(row.STATUS), archivedAt: dateText_(row.ATUALIZADO_EM || row.CRIADO_EM),
@@ -170,9 +170,8 @@ function scoreboard_() {
   var active = currentCampaign_();
   if (!active) return { campaign: null, ranking: [], version: 0, publishedAt: '', published: false };
   var campaignId = text_(active.ID);
-  var rows = rows_('PLACAR_PUBLICADO').filter(function (row) { return text_(row.GINCANA_ID) === campaignId; });
-  var version = rows.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, number_(active.VERSAO_PUBLICADA));
-  var publishedRows = rows.filter(function (row) { return number_(row.VERSAO) === version; }).sort(function (a, b) { return number_(a.POSICAO) - number_(b.POSICAO); });
+  var publishedRows = latestPublishedRows_(campaignId);
+  var version = publishedRows.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, number_(active.VERSAO_PUBLICADA));
   return {
     campaign: campaignPayload_(active),
     ranking: publishedRows.map(function (row) { return { id: text_(row.PARTICIPANTE_ID), name: text_(row.NOME), avatarUrl: text_(row.AVATAR_URL), registrations: number_(row.INSCRICOES) }; }),
@@ -291,7 +290,13 @@ function isActiveParticipantId_(participantById, id) {
 }
 
 function publishedRanking_(campaignId) {
-  return rows_('PLACAR_PUBLICADO').filter(function (row) { return text_(row.GINCANA_ID) === text_(campaignId); }).sort(function (a, b) { return number_(a.POSICAO) - number_(b.POSICAO); }).map(function (row) {
+  return latestPublishedRows_(campaignId).map(function (row) {
     return { id: text_(row.PARTICIPANTE_ID), name: text_(row.NOME), team: text_(row.EQUIPE), registrations: number_(row.INSCRICOES) };
   });
+}
+
+function latestPublishedRows_(campaignId) {
+  var rows = rows_('PLACAR_PUBLICADO').filter(function (row) { return text_(row.GINCANA_ID) === text_(campaignId); });
+  var version = rows.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, 0);
+  return rows.filter(function (row) { return number_(row.VERSAO) === version; }).sort(function (a, b) { return number_(a.POSICAO) - number_(b.POSICAO); });
 }
