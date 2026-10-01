@@ -2,6 +2,7 @@ function adminData_() {
   var participants = rows_('PARTICIPANTES');
   var products = rows_('PRODUTOS');
   var launches = rows_('LANCAMENTOS');
+  var campaignProductIds = typeof activeCampaignProductIds_ === 'function' ? activeCampaignProductIds_() : null;
   return {
     participants: participants.map(function (row) {
       return {
@@ -10,7 +11,7 @@ function adminData_() {
         historyCount: launches.filter(function (item) { return text_(item.PARTICIPANTE_ID) === text_(row.ID); }).length
       };
     }),
-    products: products.map(function (row) {
+    products: products.filter(function (row) { return campaignProductIds === null || Boolean(campaignProductIds[text_(row.ID)]); }).map(function (row) {
       return {
         id: text_(row.ID), name: text_(row.NOME), category: text_(row.CATEGORIA),
         active: isActive_(row.ATIVO), createdAt: dateText_(row.CRIADO_EM),
@@ -30,6 +31,10 @@ function adminMutate_(kind, action, input) {
     if (action.indexOf('create') === 0) {
       var object = adminObject_(kind, input, now);
       appendObject_(sheetName, object);
+      if (kind === 'product') {
+        var activeCampaign = typeof currentCampaign_ === 'function' ? currentCampaign_() : null;
+        ensureCampaignProductLink_(activeCampaign ? text_(activeCampaign.ID) : '', object.ID, now);
+      }
       auditAdmin_('CRIAR', kind, object.ID, {}, object);
     } else {
       if (!id) throw new Error('INVALID_RECORD: Identificador obrigatório.');
@@ -42,9 +47,14 @@ function adminMutate_(kind, action, input) {
         auditAdmin_('EXCLUIR', kind, id, current, {});
       } else if (action.indexOf('deactivate') === 0) {
         updateObjectById_(sheetName, id, { ATIVO: 'NAO' });
+        if (kind === 'product') updateCampaignProductLinks_(id, false);
         auditAdmin_('DESATIVAR', kind, id, current, { ATIVO: 'NAO' });
       } else if (action.indexOf('activate') === 0) {
         updateObjectById_(sheetName, id, { ATIVO: 'SIM' });
+        if (kind === 'product') {
+          var activeCampaignForProduct = typeof currentCampaign_ === 'function' ? currentCampaign_() : null;
+          ensureCampaignProductLink_(activeCampaignForProduct ? text_(activeCampaignForProduct.ID) : '', id, new Date());
+        }
         auditAdmin_('ATIVAR', kind, id, current, { ATIVO: 'SIM' });
       } else {
         var changes = adminChanges_(kind, input, current);
@@ -83,7 +93,9 @@ function adminObject_(kind, input, now) {
 function assertUnreferenced_(kind, id) {
   var field = kind === 'participant' ? 'PARTICIPANTE_ID' : 'PRODUTO_ID';
   var found = rows_('LANCAMENTOS').some(function (row) { return text_(row[field]) === id; });
-  if (found) throw new Error('RECORD_HAS_RELATIONSHIPS: Registro possui histórico; desative-o em vez de excluir.');
+  var associationSheet = kind === 'participant' ? 'GINCANA_PARTICIPANTES' : 'GINCANA_PRODUTOS';
+  var associated = rows_(associationSheet).some(function (row) { return text_(row[field]) === id; });
+  if (found || associated) throw new Error('RECORD_HAS_RELATIONSHIPS: Registro possui relacionamento ou histórico; desative-o em vez de excluir.');
 }
 
 function deactivateLegacyLinks_(kind, id) {

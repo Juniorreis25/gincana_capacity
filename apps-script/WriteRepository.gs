@@ -81,6 +81,7 @@ function assertActiveCatalogs_(participantId, productId) {
   if (!participant || !isActive_(participant.ATIVO)) throw new Error('PARTICIPANT_NOT_FOUND: Participante não encontrada ou inativa.');
   var product = rows_('PRODUTOS').find(function (item) { return text_(item.ID) === productId; });
   if (!product || !isActive_(product.ATIVO)) throw new Error('PRODUCT_NOT_FOUND: Produto não encontrado ou inativo.');
+  if (!productInActiveCampaign_(productId)) throw new Error('PRODUCT_NOT_IN_CAMPAIGN: Produto não está associado à campanha ativa.');
 }
 
 function auditLaunch_(action, id, before, after) {

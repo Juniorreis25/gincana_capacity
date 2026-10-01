@@ -13,8 +13,9 @@ function bootstrap_() {
     if (isActive_(row.ATIVO)) result[text_(row.ID)] = true;
     return result;
   }, {});
+  var campaignProductIds = activeCampaignProductIds_();
   var activeProductById = productRows.reduce(function (result, row) {
-    if (isActive_(row.ATIVO)) result[text_(row.ID)] = true;
+    if (isActive_(row.ATIVO) && (campaignProductIds === null || campaignProductIds[text_(row.ID)])) result[text_(row.ID)] = true;
     return result;
   }, {});
 
@@ -64,7 +65,7 @@ function bootstrap_() {
   return {
     campaign: typeof campaignPayload_ === 'function' ? campaignPayload_(activeCampaign) : null,
     participants: ranking,
-    products: productRows.filter(function (product) { return isActive_(product.ATIVO); }).map(function (product) {
+    products: productRows.filter(function (product) { return isActive_(product.ATIVO) && (campaignProductIds === null || campaignProductIds[text_(product.ID)]); }).map(function (product) {
       return { id: text_(product.ID), name: text_(product.NOME) };
     }),
     history: history

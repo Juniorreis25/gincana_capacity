@@ -4,6 +4,40 @@ function currentCampaign_() {
   return campaigns[0] || null;
 }
 
+function activeCampaignProductIds_() {
+  var campaign = currentCampaign_();
+  if (!campaign) return null;
+  return rows_('GINCANA_PRODUTOS').filter(function (row) {
+    return text_(row.GINCANA_ID) === text_(campaign.ID) && isActive_(row.ATIVO);
+  }).reduce(function (result, row) {
+    result[text_(row.PRODUTO_ID)] = true;
+    return result;
+  }, {});
+}
+
+function productInActiveCampaign_(productId) {
+  var ids = activeCampaignProductIds_();
+  return ids === null || Boolean(ids[text_(productId)]);
+}
+
+function ensureCampaignProductLink_(campaignId, productId, now) {
+  if (!campaignId) return;
+  var current = rows_('GINCANA_PRODUTOS').find(function (row) {
+    return text_(row.GINCANA_ID) === text_(campaignId) && text_(row.PRODUTO_ID) === text_(productId);
+  });
+  if (current) {
+    updateObjectById_('GINCANA_PRODUTOS', text_(current.ID), { ATIVO: 'SIM' });
+    return;
+  }
+  appendObject_('GINCANA_PRODUTOS', { ID: Utilities.getUuid(), GINCANA_ID: campaignId, PRODUTO_ID: productId, ATIVO: 'SIM', CRIADO_EM: now });
+}
+
+function updateCampaignProductLinks_(productId, active) {
+  rows_('GINCANA_PRODUTOS').filter(function (row) { return text_(row.PRODUTO_ID) === text_(productId); }).forEach(function (row) {
+    updateObjectById_('GINCANA_PRODUTOS', text_(row.ID), { ATIVO: active ? 'SIM' : 'NAO' });
+  });
+}
+
 function campaignPayload_(row) {
   if (!row) return null;
   return {
