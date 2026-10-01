@@ -11,15 +11,18 @@ import {
   createLaunch,
   deleteLaunch,
   getCampaign,
+  getCampaignAssociations,
   loadAdminData,
   loadBootstrap,
   listCampaigns,
   startNewCampaign,
+  updateCampaignAssociations,
   updateLaunch,
   type AdminData,
   type ArchivedCampaign,
   type BootstrapData,
   type CampaignSummary,
+  type CampaignAssociations,
   type ConnectionMode,
   type EnrollmentRow,
   type RankingRow,
@@ -44,6 +47,8 @@ export default function Home() {
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [campaigns, setCampaigns] = useState<ArchivedCampaign[]>([]);
   const [localPreviewCampaign, setLocalPreviewCampaign] = useState<CampaignSummary | null>(null);
+  const [associationsOpen, setAssociationsOpen] = useState(false);
+  const [associations, setAssociations] = useState<CampaignAssociations | null>(null);
 
   useEffect(() => {
     setView(new URLSearchParams(window.location.search).get('view') === 'scoreboard' ? 'scoreboard' : 'admin');
@@ -115,6 +120,14 @@ export default function Home() {
 
   const openNewEnrollment = () => { setEditingEnrollment(null); setEnrollmentOpen(true); };
   const openNewCampaign = () => setNewCampaignOpen(true);
+  const openAssociations = () => {
+    setAssociationsOpen(true);
+    void getCampaignAssociations().then(setAssociations).catch((error: unknown) => {
+      setAssociationsOpen(false);
+      setMessageIsError(true);
+      setMessage(error instanceof Error ? error.message : 'Não foi possível carregar as associações.');
+    });
+  };
   const displayBootstrap = localPreviewCampaign ? { ...bootstrap, participants: [], products: [], history: [] } : bootstrap;
   const displayAdminData = localPreviewCampaign ? { ...adminData, products: [] } : adminData;
   const activeCampaign = localPreviewCampaign || bootstrap.campaign || null;
@@ -145,7 +158,7 @@ export default function Home() {
         <div className="content-wrap">
           {message && <p className={messageIsError ? 'success-banner error' : 'success-banner'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
           {mode === 'error' && <ConnectionError onRetry={() => { void refreshAll().catch(() => undefined); }} />}
-          {page === 'dashboard' && <Dashboard participants={displayAdminData.participants.filter((item) => item.active).length} products={displayAdminData.products.filter((item) => item.active).length} total={totalRegistrations} leader={displayBootstrap.participants[0]} history={displayBootstrap.history} campaign={activeCampaign} campaignApiReady={bootstrap.campaign !== undefined || Boolean(localPreviewCampaign)} />}
+          {page === 'dashboard' && <Dashboard participants={displayAdminData.participants.filter((item) => item.active).length} products={displayAdminData.products.filter((item) => item.active).length} total={totalRegistrations} leader={displayBootstrap.participants[0]} history={displayBootstrap.history} campaign={activeCampaign} campaignApiReady={bootstrap.campaign !== undefined || Boolean(localPreviewCampaign)} previewMode={Boolean(localPreviewCampaign)} onConfigureAssociations={openAssociations} />}
           {page === 'participants' && <ParticipantsView data={displayAdminData} previewMode={Boolean(localPreviewCampaign)} onMutate={mutate} />}
           {page === 'products' && <ProductsView data={displayAdminData} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} previewMode={Boolean(localPreviewCampaign)} onMutate={mutate} />}
           {page === 'enrollments' && <EnrollmentsView history={displayBootstrap.history} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} onNew={openNewEnrollment} onEdit={(row) => { setEditingEnrollment(row); setEnrollmentOpen(true); }} onDeleted={async (id) => { setBootstrap(await deleteLaunch(id)); setMessageIsError(false); setMessage('Inscrição excluída. O placar foi atualizado.'); }} />}
@@ -179,6 +192,15 @@ export default function Home() {
       setMessageIsError(false);
       setMessage(`Prévia local: “${input.name}” foi configurada. A gravação do arquivo será conectada ao Apps Script na próxima etapa.`);
     }} />
+    <CampaignAssociationsDialog open={associationsOpen} onOpenChange={setAssociationsOpen} data={associations} onSave={async (input) => {
+      const saved = await updateCampaignAssociations(input);
+      setAssociations(saved);
+      const [live, admin] = await Promise.all([loadBootstrap(), loadAdminData()]);
+      setBootstrap(live);
+      setAdminData(admin);
+      setMessageIsError(false);
+      setMessage('Associações da campanha atualizadas.');
+    }} />
   </>;
 }
 
@@ -191,9 +213,9 @@ function LoadingScreen() { return <main className="loading-screen" aria-live="po
 
 function ConnectionError({ onRetry }: { onRetry: () => void }) { return <section className="connection-error"><div><strong>Não foi possível acessar a planilha.</strong><span>Os últimos dados válidos foram mantidos. Tente novamente.</span></div><Button variant="outline" onClick={onRetry}><RefreshCw size={16}/> Tentar novamente</Button></section>; }
 
-function Dashboard({ participants, products, total, leader, history, campaign, campaignApiReady }: { participants: number; products: number; total: number; leader?: RankingRow; history: EnrollmentRow[]; campaign: CampaignSummary | null; campaignApiReady: boolean }) {
+function Dashboard({ participants, products, total, leader, history, campaign, campaignApiReady, previewMode, onConfigureAssociations }: { participants: number; products: number; total: number; leader?: RankingRow; history: EnrollmentRow[]; campaign: CampaignSummary | null; campaignApiReady: boolean; previewMode: boolean; onConfigureAssociations: () => void }) {
   return <div className="simple-dashboard">
-    {campaignApiReady && <section className={campaign ? 'campaign-context-card' : 'campaign-context-card empty'}><div><p className="eyebrow">Campanha atual</p><h2>{campaign?.name || 'Nenhuma campanha ativa'}</h2>{campaign && <span>{formatDate(campaign.startDate || '')} a {formatDate(campaign.endDate || '')}</span>}</div><strong>{campaign ? 'ATIVA' : 'Aguardando criação'}</strong></section>}
+    {campaignApiReady && <section className={campaign ? 'campaign-context-card' : 'campaign-context-card empty'}><div><p className="eyebrow">Campanha atual</p><h2>{campaign?.name || 'Nenhuma campanha ativa'}</h2>{campaign && <span>{formatDate(campaign.startDate || '')} a {formatDate(campaign.endDate || '')}</span>}</div><div className="campaign-context-actions"><strong>{campaign ? 'ATIVA' : 'Aguardando criação'}</strong>{campaign && <Button variant="outline" disabled={previewMode} onClick={onConfigureAssociations}>Configurar associações</Button>}</div></section>}
     <section className="metrics-grid simple-metrics">
       <Metric label="Participantes ativos" value={String(participants)} icon={<UserCheck/>}/><Metric label="Produtos ativos" value={String(products)} icon={<Package/>}/><Metric label="Total de inscrições" value={String(total)} icon={<ListChecks/>}/><Metric label="Líder atual" value={leader?.name || 'Ainda não definido'} detail={leader ? `${leader.registrations} inscrições` : 'Aguardando registros'} icon={<Medal/>} featured/>
     </section>
@@ -277,6 +299,27 @@ function NewCampaignDialog({ open, onOpenChange, onSave }: { open: boolean; onOp
   useEffect(() => { if (open) { setName(''); setMonth(String(new Date().getMonth() + 1).padStart(2, '0')); setYear(new Date().getFullYear()); setArchiveCurrent(true); setError(''); } }, [open]);
   const canSave = name.trim().length >= 2 && month && year >= 2020 && year <= 2100;
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="entity-dialog campaign-dialog"><DialogHeader><DialogTitle>Nova campanha</DialogTitle><DialogDescription>Prepare a próxima campanha sem perder o resultado da anterior.</DialogDescription></DialogHeader><div className="campaign-callout"><Archive size={18}/><p><strong>O que acontece com os dados?</strong><span>O placar geral da campanha atual será arquivado. Participantes permanecem disponíveis para reutilização.</span></p></div><div className="form-grid"><Field label="Nome da campanha" id="campaign-name"><Input id="campaign-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Campanha Outubro 2026" autoFocus/></Field><Field label="Mês" id="campaign-month"><select id="campaign-month" value={month} onChange={(e) => setMonth(e.target.value)}>{['01','02','03','04','05','06','07','08','09','10','11','12'].map((value) => <option key={value} value={value}>{new Date(2000, Number(value) - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })}</option>)}</select></Field><Field label="Ano" id="campaign-year"><Input id="campaign-year" type="number" min={2020} max={2100} value={year} onChange={(e) => setYear(Number(e.target.value))}/></Field></div><label className="campaign-check"><input type="checkbox" checked={archiveCurrent} onChange={(e) => setArchiveCurrent(e.target.checked)}/><span><strong>Arquivar resultados da última campanha</strong><small>Recomendado: salva o placar final no menu Arquivo antes de iniciar a nova campanha.</small></span></label>{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" disabled={saving || !canSave} onClick={() => { setSaving(true); setError(''); void onSave({ name: name.trim(), month, year, archiveCurrent }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível preparar a campanha.')).finally(() => setSaving(false)); }}>{saving ? 'Preparando…' : 'Criar campanha'}</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+function CampaignAssociationsDialog({ open, onOpenChange, data, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; data: CampaignAssociations | null; onSave: (input: { participantIds: string[]; productIds: string[] }) => Promise<void> }) {
+  const [participantIds, setParticipantIds] = useState<string[]>([]);
+  const [productIds, setProductIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!open || !data) return;
+    setParticipantIds(data.participants.filter((item) => item.associated).map((item) => item.id));
+    setProductIds(data.products.filter((item) => item.associated).map((item) => item.id));
+    setError('');
+  }, [open, data]);
+  const toggle = (current: string[], id: string) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id];
+  const activeParticipants = data?.participants.filter((item) => item.active) || [];
+  const activeProducts = data?.products.filter((item) => item.active) || [];
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="entity-dialog association-dialog"><DialogHeader><DialogTitle>Associações da campanha</DialogTitle><DialogDescription>{data ? `Selecione os participantes e produtos de ${data.campaign.name}.` : 'Carregando as opções disponíveis…'}</DialogDescription></DialogHeader>{data ? <div className="association-columns"><AssociationColumn title="Participantes" items={activeParticipants} selected={participantIds} onToggle={(id) => setParticipantIds((current) => toggle(current, id))}/><AssociationColumn title="Produtos" items={activeProducts} selected={productIds} onToggle={(id) => setProductIds((current) => toggle(current, id))}/></div> : <div className="association-loading">Carregando associações…</div>}{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" disabled={!data || saving} onClick={() => { setSaving(true); setError(''); void onSave({ participantIds, productIds }).then(() => onOpenChange(false)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível salvar as associações.')).finally(() => setSaving(false)); }}>{saving ? 'Salvando…' : 'Salvar associações'}</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+function AssociationColumn({ title, items, selected, onToggle }: { title: string; items: Array<{ id: string; name: string }>; selected: string[]; onToggle: (id: string) => void }) {
+  return <section className="association-column"><div className="association-column-head"><strong>{title}</strong><small>{selected.length} selecionado(s)</small></div>{items.length ? <div className="association-options">{items.map((item) => <label key={item.id} className="association-option"><input type="checkbox" checked={selected.includes(item.id)} onChange={() => onToggle(item.id)}/><span>{item.name}</span></label>)}</div> : <div className="association-empty">Nenhum cadastro ativo.</div>}</section>;
 }
 
 function ConfirmDialog({ open, title, description, confirmLabel, onOpenChange, onConfirm }: { open: boolean; title: string; description: string; confirmLabel: string; onOpenChange: (open: boolean) => void; onConfirm: () => Promise<void> }) { const [busy, setBusy] = useState(false); const [error, setError] = useState(''); useEffect(() => { if (open) setError(''); }, [open]); return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button variant="destructive" disabled={busy} onClick={() => { setBusy(true); setError(''); void onConfirm().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível concluir.')).finally(() => setBusy(false)); }}>{busy ? 'Processando…' : confirmLabel}</Button></DialogFooter></DialogContent></Dialog>; }

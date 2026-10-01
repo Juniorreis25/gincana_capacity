@@ -56,6 +56,9 @@ export type AdminData = {
   products: Array<{ id: string; name: string; category?: string; active: boolean; historyCount: number }>;
 };
 
+export type CampaignAssociationOption = { id: string; name: string; active: boolean; associated: boolean };
+export type CampaignAssociations = { campaign: CampaignSummary; participants: CampaignAssociationOption[]; products: CampaignAssociationOption[] };
+
 type IntegrationResponse<T> = {
   ok: boolean;
   data?: T;
@@ -91,6 +94,14 @@ export function listCampaigns(signal?: AbortSignal): Promise<ArchivedCampaign[]>
 
 export function getCampaign(id: string, signal?: AbortSignal): Promise<{ campaign: CampaignSummary; ranking: RankingRow[] }> {
   return postAction<{ campaign: CampaignSummary; ranking: RankingRow[] }>({ action: 'getCampaign', id }, 'Não foi possível carregar a campanha arquivada.', signal);
+}
+
+export function getCampaignAssociations(signal?: AbortSignal): Promise<CampaignAssociations> {
+  return postAction<CampaignAssociations>({ action: 'getCampaignAssociations' }, 'Não foi possível carregar as associações da campanha.', signal);
+}
+
+export function updateCampaignAssociations(input: { participantIds: string[]; productIds: string[] }): Promise<CampaignAssociations> {
+  return postAction<CampaignAssociations>({ action: 'updateCampaignAssociations', ...input }, 'Não foi possível salvar as associações da campanha.');
 }
 
 export function startNewCampaign(input: { name: string; month: string; year: number; archiveCurrent: boolean }): Promise<{ campaign: CampaignSummary; archive: { campaign: CampaignSummary; ranking: RankingRow[] } | null; campaigns: ArchivedCampaign[]; bootstrap: BootstrapData; adminData: AdminData }> {

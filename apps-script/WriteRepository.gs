@@ -79,6 +79,8 @@ function validateLaunchInput_(input) {
 function assertActiveCatalogs_(participantId, productId) {
   var participant = rows_('PARTICIPANTES').find(function (item) { return text_(item.ID) === participantId; });
   if (!participant || !isActive_(participant.ATIVO)) throw new Error('PARTICIPANT_NOT_FOUND: Participante não encontrada ou inativa.');
+  var participantIds = activeCampaignParticipantIds_();
+  if (participantIds !== null && !participantIds[text_(participantId)]) throw new Error('PARTICIPANT_NOT_IN_CAMPAIGN: Participante não está associado à campanha ativa.');
   var product = rows_('PRODUTOS').find(function (item) { return text_(item.ID) === productId; });
   if (!product || !isActive_(product.ATIVO)) throw new Error('PRODUCT_NOT_FOUND: Produto não encontrado ou inativo.');
   if (!productInActiveCampaign_(productId)) throw new Error('PRODUCT_NOT_IN_CAMPAIGN: Produto não está associado à campanha ativa.');

@@ -48,12 +48,17 @@ function adminMutate_(kind, action, input) {
       } else if (action.indexOf('deactivate') === 0) {
         updateObjectById_(sheetName, id, { ATIVO: 'NAO' });
         if (kind === 'product') updateCampaignProductLinks_(id, false);
+        if (kind === 'participant') updateCampaignParticipantLinks_(id, false);
         auditAdmin_('DESATIVAR', kind, id, current, { ATIVO: 'NAO' });
       } else if (action.indexOf('activate') === 0) {
         updateObjectById_(sheetName, id, { ATIVO: 'SIM' });
         if (kind === 'product') {
           var activeCampaignForProduct = typeof currentCampaign_ === 'function' ? currentCampaign_() : null;
           ensureCampaignProductLink_(activeCampaignForProduct ? text_(activeCampaignForProduct.ID) : '', id, new Date());
+        }
+        if (kind === 'participant') {
+          var activeCampaignForParticipant = typeof currentCampaign_ === 'function' ? currentCampaign_() : null;
+          ensureCampaignParticipantLink_(activeCampaignForParticipant ? text_(activeCampaignForParticipant.ID) : '', id, new Date());
         }
         auditAdmin_('ATIVAR', kind, id, current, { ATIVO: 'SIM' });
       } else {

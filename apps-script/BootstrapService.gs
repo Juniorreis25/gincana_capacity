@@ -9,8 +9,9 @@ function bootstrap_() {
   });
   var participantById = indexBy_(participantRows, 'ID');
   var productById = indexBy_(productRows, 'ID');
+  var campaignParticipantIds = activeCampaignParticipantIds_();
   var activeParticipantById = participantRows.reduce(function (result, row) {
-    if (isActive_(row.ATIVO)) result[text_(row.ID)] = true;
+    if (isActive_(row.ATIVO) && (campaignParticipantIds === null || campaignParticipantIds[text_(row.ID)])) result[text_(row.ID)] = true;
     return result;
   }, {});
   var campaignProductIds = activeCampaignProductIds_();

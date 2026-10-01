@@ -12,6 +12,8 @@ function doPost(e) {
     if (action === 'bootstrap') return json_(ok_(bootstrap_()));
     if (action === 'listCampaigns') return json_(ok_(listCampaigns_()));
     if (action === 'getCampaign') return json_(ok_(getCampaign_(body)));
+    if (action === 'getCampaignAssociations') return json_(ok_(campaignAssociations_(body)));
+    if (action === 'updateCampaignAssociations') return json_(ok_(updateCampaignAssociations_(body)));
     if (action === 'startNewCampaign') return json_(ok_(startNewCampaign_(body)));
     if (action === 'createLaunch') return json_(ok_(createLaunch_(body)));
     if (action === 'updateLaunch') return json_(ok_(updateLaunch_(body)));
