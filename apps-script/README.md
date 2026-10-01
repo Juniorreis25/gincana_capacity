@@ -29,15 +29,17 @@ O ranking é recalculado no Apps Script a cada leitura e considera somente inscr
 Antes de iniciar a primeira campanha mensal, a migração de lançamentos sem
 `GINCANA_ID` deve ser feita manualmente no editor do Apps Script. As funções
 `createOfficialBackup_`, `legacyMigrationPreview_` e
-`migrateLegacyCampaign_` terminam com `_` de propósito: não são ações aceitas
+`migrateLegacyCampaign_` e `campaignIntegrityPreview_` terminam com `_` de propósito: não são ações aceitas
 pelo proxy e não podem ser chamadas pelo Site.
 
 1. Cole todos os arquivos deste diretório no projeto Apps Script e salve.
 2. Execute `legacyMigrationPreview_()` e revise as quantidades retornadas.
-3. Confirme que não existe campanha `ATIVA` e que a prévia identifica somente
+3. Execute `campaignIntegrityPreview_()` antes e depois da migração para
+   conferir lançamentos órfãos, associações, pendências e versão publicada.
+4. Confirme que não existe campanha `ATIVA` e que a prévia identifica somente
    os lançamentos históricos esperados.
-4. Execute `migrateLegacyCampaign_({ confirmation: 'MIGRATE_LEGACY', name: 'Campanha Setembro 2026', startDate: '2026-09-01', endDate: '2026-09-30', backupLabel: 'setembro-2026' })`.
-5. Guarde o `backup.id` e o `backup.url` retornados. A rotina cria uma cópia
+5. Execute `migrateLegacyCampaign_({ confirmation: 'MIGRATE_LEGACY', name: 'Campanha Setembro 2026', startDate: '2026-09-01', endDate: '2026-09-30', backupLabel: 'setembro-2026' })`.
+6. Guarde o `backup.id` e o `backup.url` retornados. A rotina cria uma cópia
    no Google Drive antes de escrever na planilha.
 
 A rotina cria a campanha histórica como `ENCERRADA`, associa os lançamentos

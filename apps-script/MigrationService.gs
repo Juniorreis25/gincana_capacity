@@ -43,6 +43,34 @@ function legacyMigrationPreview_() {
   };
 }
 
+function campaignIntegrityPreview_() {
+  var campaigns = rows_('GINCANAS');
+  var active = currentCampaign_();
+  var campaignIds = campaigns.reduce(function (result, row) { result[text_(row.ID)] = true; return result; }, {});
+  var launches = rows_('LANCAMENTOS');
+  var activeId = active ? text_(active.ID) : '';
+  var scoped = activeId ? launches.filter(function (launch) { return text_(launch.GINCANA_ID) === activeId; }) : [];
+  var published = activeId ? latestPublishedRows_(activeId) : [];
+  var warnings = [];
+  var orphanCount = launches.filter(function (launch) { return !text_(launch.GINCANA_ID); }).length;
+  var unknownCampaignCount = launches.filter(function (launch) { return text_(launch.GINCANA_ID) && !campaignIds[text_(launch.GINCANA_ID)]; }).length;
+  if (campaigns.filter(function (row) { return text_(row.STATUS).toUpperCase() === 'ATIVA'; }).length > 1) warnings.push('Mais de uma campanha ativa.');
+  if (orphanCount) warnings.push(orphanCount + ' lançamento(s) sem GINCANA_ID.');
+  if (unknownCampaignCount) warnings.push(unknownCampaignCount + ' lançamento(s) apontam para campanha inexistente.');
+  if (active && !rows_('GINCANA_PARTICIPANTES').some(function (row) { return text_(row.GINCANA_ID) === activeId && isActive_(row.ATIVO); })) warnings.push('A campanha ativa não possui participantes associados.');
+  if (active && !rows_('GINCANA_PRODUTOS').some(function (row) { return text_(row.GINCANA_ID) === activeId && isActive_(row.ATIVO); })) warnings.push('A campanha ativa não possui produtos associados.');
+  return {
+    activeCampaign: campaignPayload_(active),
+    campaignCount: campaigns.length,
+    activeParticipantAssociations: activeId ? rows_('GINCANA_PARTICIPANTES').filter(function (row) { return text_(row.GINCANA_ID) === activeId && isActive_(row.ATIVO); }).length : 0,
+    activeProductAssociations: activeId ? rows_('GINCANA_PRODUTOS').filter(function (row) { return text_(row.GINCANA_ID) === activeId && isActive_(row.ATIVO); }).length : 0,
+    launches: { total: launches.length, activeCampaign: scoped.length, pending: scoped.filter(function (launch) { return text_(launch.STATUS).toUpperCase() === 'ATIVO' && !text_(launch.PUBLICADO_NA_VERSAO); }).length, withoutCampaign: orphanCount, unknownCampaign: unknownCampaignCount },
+    published: { version: published.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, 0), rows: published.length, totalRegistrations: published.reduce(function (sum, row) { return sum + number_(row.INSCRICOES); }, 0) },
+    warnings: warnings,
+    ready: warnings.length === 0
+  };
+}
+
 function migrateLegacyCampaign_(input) {
   var values = validateMigrationInput_(input);
   var preview = legacyMigrationPreview_();
