@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Crown, Eye, LayoutDashboard, ListChecks, Medal, Minus, Package, Pencil, Plus, RefreshCw, Trash2, Trophy, UserCheck, Users } from 'lucide-react';
+import { Archive, ArrowDown, ArrowUp, CalendarDays, Crown, Eye, LayoutDashboard, ListChecks, Medal, Minus, Package, Pencil, Plus, RefreshCw, Trash2, Trophy, UserCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,10 +20,10 @@ import {
   type RankingRow,
 } from '@/lib/integration';
 
-type PageName = 'dashboard' | 'participants' | 'products' | 'enrollments';
+type PageName = 'dashboard' | 'participants' | 'products' | 'enrollments' | 'archive';
 const emptyBootstrap: BootstrapData = { participants: [], products: [], history: [] };
 const emptyAdmin: AdminData = { participants: [], products: [] };
-const pageTitles: Record<PageName, string> = { dashboard: 'Visão geral', participants: 'Participantes', products: 'Produtos', enrollments: 'Inscrições' };
+const pageTitles: Record<PageName, string> = { dashboard: 'Visão geral', participants: 'Participantes', products: 'Produtos', enrollments: 'Inscrições', archive: 'Arquivo' };
 
 export default function Home() {
   const [view, setView] = useState<'admin' | 'scoreboard'>('admin');
@@ -36,6 +36,7 @@ export default function Home() {
   const [messageIsError, setMessageIsError] = useState(false);
   const [enrollmentOpen, setEnrollmentOpen] = useState(false);
   const [editingEnrollment, setEditingEnrollment] = useState<EnrollmentRow | null>(null);
+  const [newCampaignOpen, setNewCampaignOpen] = useState(false);
 
   useEffect(() => {
     setView(new URLSearchParams(window.location.search).get('view') === 'scoreboard' ? 'scoreboard' : 'admin');
@@ -104,6 +105,7 @@ export default function Home() {
   };
 
   const openNewEnrollment = () => { setEditingEnrollment(null); setEnrollmentOpen(true); };
+  const openNewCampaign = () => setNewCampaignOpen(true);
   const totalRegistrations = bootstrap.participants.reduce((sum, item) => sum + item.registrations, 0);
 
   if (!routeReady) return <LoadingScreen />;
@@ -114,6 +116,7 @@ export default function Home() {
     { id: 'participants', label: 'Participantes', icon: Users },
     { id: 'products', label: 'Produtos', icon: Package },
     { id: 'enrollments', label: 'Inscrições', icon: ListChecks },
+    { id: 'archive', label: 'Arquivo', icon: Archive },
   ];
 
   return <>
@@ -125,7 +128,7 @@ export default function Home() {
       <section className="main-panel">
         <header className="topbar">
           <div><div className="topbar-kicker"><p className="eyebrow">Gestão comercial</p><ConnectionBadge mode={mode} hasData={adminData.participants.length + adminData.products.length > 0} /></div><h1>{pageTitles[page]}</h1></div>
-          <div className="topbar-actions"><Button variant="outline" className="rounded-full" onClick={openScoreboard}><Eye size={17}/> Ver placar da TV</Button><Button className="primary-action rounded-full" disabled={mode !== 'live'} onClick={openNewEnrollment}><Plus size={18}/> Registrar inscrição</Button></div>
+          <div className="topbar-actions"><Button variant="outline" className="rounded-full" onClick={openScoreboard}><Eye size={17}/> Ver placar da TV</Button><Button variant="outline" className="rounded-full" disabled={mode !== 'live'} onClick={openNewCampaign}><CalendarDays size={17}/> Nova campanha</Button><Button className="primary-action rounded-full" disabled={mode !== 'live'} onClick={openNewEnrollment}><Plus size={18}/> Registrar inscrição</Button></div>
         </header>
         <div className="content-wrap">
           {message && <p className={messageIsError ? 'success-banner error' : 'success-banner'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
@@ -134,10 +137,12 @@ export default function Home() {
           {page === 'participants' && <ParticipantsView data={adminData} onMutate={mutate} />}
           {page === 'products' && <ProductsView data={adminData} onMutate={mutate} />}
           {page === 'enrollments' && <EnrollmentsView history={bootstrap.history} onNew={openNewEnrollment} onEdit={(row) => { setEditingEnrollment(row); setEnrollmentOpen(true); }} onDeleted={async (id) => { setBootstrap(await deleteLaunch(id)); setMessageIsError(false); setMessage('Inscrição excluída. O placar foi atualizado.'); }} />}
+          {page === 'archive' && <ArchiveView />}
         </div>
       </section>
     </main>
     <EnrollmentDialog open={enrollmentOpen} onOpenChange={setEnrollmentOpen} editing={editingEnrollment} participants={adminData.participants.filter((item) => item.active)} products={adminData.products.filter((item) => item.active)} onSaved={async (input) => { const live = editingEnrollment ? await updateLaunch({ id: editingEnrollment.id, ...input }) : await createLaunch(input); setBootstrap(live); setAdminData(await loadAdminData()); setEnrollmentOpen(false); setEditingEnrollment(null); setMessageIsError(false); setMessage(editingEnrollment ? 'Inscrição atualizada. O placar foi recalculado.' : 'Inscrição registrada. O placar foi atualizado.'); }} />
+    <NewCampaignDialog open={newCampaignOpen} onOpenChange={setNewCampaignOpen} onSave={async (input) => { setNewCampaignOpen(false); setPage('archive'); setMessageIsError(false); setMessage(`Prévia local: “${input.name}” foi configurada. A gravação do arquivo será conectada ao Apps Script na próxima etapa.`); }} />
   </>;
 }
 
@@ -168,6 +173,13 @@ function enrollmentStatus(row: EnrollmentRow) {
 }
 
 function RecentEnrollments({ history }: { history: EnrollmentRow[] }) { return <section className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Atividade recente</p></div></div>{history.length ? <div className="simple-table"><div className="simple-table-head" aria-hidden="true"><span>Data</span><span>Participante</span><span>Produto</span><span>Nº de inscrições</span><span>Status</span></div>{history.map((row) => { const status = enrollmentStatus(row); return <div className="simple-row" key={row.id}><span>{formatDate(row.date)}</span><strong>{row.participant}</strong><span>{row.product}</span><b>{row.quantity}</b><em className={status.className}>{status.label}</em></div>; })}</div> : <EmptyState text="Nenhuma inscrição registrada."/>}</section>; }
+
+function ArchiveView() {
+  return <section className="panel-card list-page archive-page">
+    <div className="list-page-head"><div><p className="eyebrow">Histórico de campanhas</p><h2>Arquivo</h2></div><span className="integration-badge demo">Prévia local</span></div>
+    <div className="archive-intro"><Archive size={22}/><div><strong>Nenhuma campanha arquivada</strong><p>Quando uma campanha for encerrada, o placar geral será salvo aqui para consulta por mês e ano. Participantes serão preservados para a próxima campanha.</p></div></div>
+  </section>;
+}
 
 function ParticipantsView({ data, onMutate }: { data: AdminData; onMutate: (action: string, input: Record<string, unknown>, success: string) => Promise<void> }) {
   const [editing, setEditing] = useState<AdminData['participants'][number] | null>(null); const [open, setOpen] = useState(false); const [confirm, setConfirm] = useState<AdminData['participants'][number] | null>(null);
@@ -201,6 +213,19 @@ function EnrollmentDialog({ open, onOpenChange, editing, participants, products,
   useEffect(() => { if (!open) return; setParticipantId(editing?.participantId || participants[0]?.id || ''); setProductId(editing?.productId || products[0]?.id || ''); setQuantity(editing?.quantity || 1); setDate(editing?.date?.slice(0,10) || today()); setNotes(editing?.notes || ''); setError(''); }, [open, editing, participants, products]);
   const canSave = participantId && productId && Number.isInteger(quantity) && quantity > 0 && date;
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="entity-dialog enrollment-dialog"><DialogHeader><DialogTitle>{editing ? 'Editar inscrição' : 'Registrar inscrição'}</DialogTitle><DialogDescription>O placar será recalculado automaticamente após salvar.</DialogDescription></DialogHeader>{participants.length && products.length ? <div className="form-grid"><Field label="Participante" id="enrollment-participant"><select id="enrollment-participant" value={participantId} onChange={(e) => setParticipantId(e.target.value)}>{participants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Produto" id="enrollment-product"><select id="enrollment-product" value={productId} onChange={(e) => setProductId(e.target.value)}>{products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Quantidade" id="enrollment-quantity"><Input id="enrollment-quantity" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}/></Field><Field label="Data" id="enrollment-date"><Input id="enrollment-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}/></Field><div className="field full"><Label htmlFor="enrollment-notes">Observação (opcional)</Label><Input id="enrollment-notes" value={notes} onChange={(e) => setNotes(e.target.value)}/></div></div> : <EmptyState text="Cadastre ao menos uma participante e um produto ativos antes de registrar uma inscrição."/>}{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" disabled={saving || !canSave} onClick={() => { setSaving(true); setError(''); void onSaved({ participantId, productId, quantity, date, notes: notes.trim() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.')).finally(() => setSaving(false)); }}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Registrar inscrição'}</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+function NewCampaignDialog({ open, onOpenChange, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; onSave: (input: { name: string; month: string; year: number; archiveCurrent: boolean }) => Promise<void> }) {
+  const now = new Date();
+  const [name, setName] = useState('');
+  const [month, setMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
+  const [year, setYear] = useState(now.getFullYear());
+  const [archiveCurrent, setArchiveCurrent] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { if (open) { setName(''); setMonth(String(new Date().getMonth() + 1).padStart(2, '0')); setYear(new Date().getFullYear()); setArchiveCurrent(true); setError(''); } }, [open]);
+  const canSave = name.trim().length >= 2 && month && year >= 2020 && year <= 2100;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="entity-dialog campaign-dialog"><DialogHeader><DialogTitle>Nova campanha</DialogTitle><DialogDescription>Prepare a próxima campanha sem perder o resultado da anterior.</DialogDescription></DialogHeader><div className="campaign-callout"><Archive size={18}/><p><strong>O que acontece com os dados?</strong><span>O placar geral da campanha atual será arquivado. Participantes permanecem disponíveis para reutilização.</span></p></div><div className="form-grid"><Field label="Nome da campanha" id="campaign-name"><Input id="campaign-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Campanha Outubro 2026" autoFocus/></Field><Field label="Mês" id="campaign-month"><select id="campaign-month" value={month} onChange={(e) => setMonth(e.target.value)}>{['01','02','03','04','05','06','07','08','09','10','11','12'].map((value) => <option key={value} value={value}>{new Date(2000, Number(value) - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })}</option>)}</select></Field><Field label="Ano" id="campaign-year"><Input id="campaign-year" type="number" min={2020} max={2100} value={year} onChange={(e) => setYear(Number(e.target.value))}/></Field></div><label className="campaign-check"><input type="checkbox" checked={archiveCurrent} onChange={(e) => setArchiveCurrent(e.target.checked)}/><span><strong>Arquivar resultados da última campanha</strong><small>Recomendado: salva o placar final no menu Arquivo antes de iniciar a nova campanha.</small></span></label>{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" disabled={saving || !canSave} onClick={() => { setSaving(true); setError(''); void onSave({ name: name.trim(), month, year, archiveCurrent }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível preparar a campanha.')).finally(() => setSaving(false)); }}>{saving ? 'Preparando…' : 'Criar campanha'}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function ConfirmDialog({ open, title, description, confirmLabel, onOpenChange, onConfirm }: { open: boolean; title: string; description: string; confirmLabel: string; onOpenChange: (open: boolean) => void; onConfirm: () => Promise<void> }) { const [busy, setBusy] = useState(false); const [error, setError] = useState(''); useEffect(() => { if (open) setError(''); }, [open]); return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button variant="destructive" disabled={busy} onClick={() => { setBusy(true); setError(''); void onConfirm().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível concluir.')).finally(() => setBusy(false)); }}>{busy ? 'Processando…' : confirmLabel}</Button></DialogFooter></DialogContent></Dialog>; }
