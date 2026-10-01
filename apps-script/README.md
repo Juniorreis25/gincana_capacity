@@ -11,6 +11,6 @@ Este diretório contém o backend JSON do MVP. O Site privado é o frontend ofic
 
 ## Operações ativas
 
-`bootstrap`, `adminData`, `createLaunch`, `updateLaunch`, `deleteLaunch` e o CRUD/ativação de participantes e produtos.
+`bootstrap`, `adminData`, `listCampaigns`, `getCampaign`, `startNewCampaign`, `createLaunch`, `updateLaunch`, `deleteLaunch` e o CRUD/ativação de participantes e produtos.
 
-O ranking é recalculado no Apps Script a cada leitura e considera somente inscrições ativas vinculadas a participantes e produtos ativos. Ao desativar um participante ou produto, os lançamentos relacionados permanecem no histórico com situação `INATIVADO`, mas deixam de contabilizar no ranking e no placar. O backend não depende de gincana ativa, associações, prévia, versão publicada ou `PLACAR_PUBLICADO`. Uma base vazia retorna listas vazias com sucesso; não há dados demonstrativos de fallback.
+O ranking é recalculado no Apps Script a cada leitura e considera somente inscrições ativas vinculadas a participantes e produtos ativos dentro da campanha ativa. Enquanto não houver campanha ativa, o backend mantém compatibilidade com os lançamentos legados sem `GINCANA_ID`. Ao iniciar uma nova campanha, o fluxo protegido pode arquivar o ranking anterior em `PLACAR_PUBLICADO`/`PUBLICACOES`, encerrar a campanha anterior, preservar os participantes e criar um novo contexto operacional. Uma base vazia retorna listas vazias com sucesso; não há dados demonstrativos de fallback.

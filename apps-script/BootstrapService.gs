@@ -1,7 +1,12 @@
 function bootstrap_() {
+  var activeCampaign = typeof currentCampaign_ === 'function' ? currentCampaign_() : null;
+  var activeCampaignId = activeCampaign ? text_(activeCampaign.ID) : '';
   var participantRows = rows_('PARTICIPANTES');
   var productRows = rows_('PRODUTOS');
   var launches = rows_('LANCAMENTOS');
+  var scopedLaunches = launches.filter(function (launch) {
+    return activeCampaignId ? text_(launch.GINCANA_ID) === activeCampaignId : true;
+  });
   var participantById = indexBy_(participantRows, 'ID');
   var productById = indexBy_(productRows, 'ID');
   var activeParticipantById = participantRows.reduce(function (result, row) {
@@ -13,7 +18,7 @@ function bootstrap_() {
     return result;
   }, {});
 
-  var totals = launches.filter(function (launch) {
+  var totals = scopedLaunches.filter(function (launch) {
     return text_(launch.STATUS).toUpperCase() === 'ATIVO'
       && activeParticipantById[text_(launch.PARTICIPANTE_ID)]
       && activeProductById[text_(launch.PRODUTO_ID)];
@@ -36,7 +41,7 @@ function bootstrap_() {
     return b.registrations - a.registrations || a.name.localeCompare(b.name);
   });
 
-  var history = launches.map(function (launch) {
+  var history = scopedLaunches.map(function (launch) {
     var participant = participantById[text_(launch.PARTICIPANTE_ID)] || {};
     var product = productById[text_(launch.PRODUTO_ID)] || {};
     return {
@@ -57,6 +62,7 @@ function bootstrap_() {
   });
 
   return {
+    campaign: typeof campaignPayload_ === 'function' ? campaignPayload_(activeCampaign) : null,
     participants: ranking,
     products: productRows.filter(function (product) { return isActive_(product.ATIVO); }).map(function (product) {
       return { id: text_(product.ID), name: text_(product.NOME) };

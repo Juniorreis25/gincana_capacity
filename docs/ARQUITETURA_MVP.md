@@ -15,7 +15,7 @@ O Apps Script é publicado somente como Web App JSON. Ele não hospeda as telas 
 
 O ranking é a soma das inscrições ativas por participante. Criar ou editar uma inscrição altera o ranking imediatamente; excluir uma inscrição é uma exclusão lógica e a retira do total. A TV lê apenas o `bootstrap` calculado pelo servidor, preserva os últimos dados válidos em falhas transitórias e verifica atualizações a cada 15 segundos.
 
-Não fazem parte do MVP as telas ou regras de equipes, gincanas, associações, aprovação, prévia, publicação manual, versões ou snapshot em `PLACAR_PUBLICADO`. As abas antigas permanecem na planilha apenas como legado estrutural e não participam do fluxo ativo.
+O MVP operacional trabalha com uma campanha ativa por vez. Campanhas anteriores são encerradas e consultadas pelo menu Arquivo a partir de snapshots em `PLACAR_PUBLICADO` e registros em `PUBLICACOES`. O Site continua sendo o frontend privado; o Apps Script permanece como backend de regras e persistência, sem hospedar as interfaces.
 
 ## Dados vazios e falhas
 

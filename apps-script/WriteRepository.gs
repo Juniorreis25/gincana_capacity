@@ -13,8 +13,9 @@ function createLaunch_(input) {
     assertActiveCatalogs_(values.participantId, values.productId);
     var now = new Date();
     var id = Utilities.getUuid();
+    var activeCampaign = typeof currentCampaign_ === 'function' ? currentCampaign_() : null;
     var launch = {
-      ID: id, GINCANA_ID: '', PARTICIPANTE_ID: values.participantId, PRODUTO_ID: values.productId,
+      ID: id, GINCANA_ID: activeCampaign ? text_(activeCampaign.ID) : '', PARTICIPANTE_ID: values.participantId, PRODUTO_ID: values.productId,
       TIPO: 'INSCRICAO', STATUS: 'ATIVO', INSCRICOES_DELTA: values.quantity,
       VALOR_CENTAVOS_DELTA: 0, PONTOS_DELTA: 0, DATA_OCORRENCIA: values.date,
       ORGAO_CLIENTE: '', OBSERVACAO: values.notes, LANCAMENTO_ORIGEM_ID: '',

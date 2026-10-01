@@ -10,6 +10,9 @@ function doPost(e) {
   if (!isAuthorized_(body.token, action)) return json_(fail_('UNAUTHORIZED', 'Token de integração inválido.'));
   try {
     if (action === 'bootstrap') return json_(ok_(bootstrap_()));
+    if (action === 'listCampaigns') return json_(ok_(listCampaigns_()));
+    if (action === 'getCampaign') return json_(ok_(getCampaign_(body)));
+    if (action === 'startNewCampaign') return json_(ok_(startNewCampaign_(body)));
     if (action === 'createLaunch') return json_(ok_(createLaunch_(body)));
     if (action === 'updateLaunch') return json_(ok_(updateLaunch_(body)));
     if (action === 'deleteLaunch') return json_(ok_(deleteLaunch_(body)));

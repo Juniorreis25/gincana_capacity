@@ -12,6 +12,7 @@ import {
   deleteLaunch,
   loadAdminData,
   loadBootstrap,
+  startNewCampaign,
   updateLaunch,
   type AdminData,
   type BootstrapData,
@@ -142,7 +143,22 @@ export default function Home() {
       </section>
     </main>
     <EnrollmentDialog open={enrollmentOpen} onOpenChange={setEnrollmentOpen} editing={editingEnrollment} participants={adminData.participants.filter((item) => item.active)} products={adminData.products.filter((item) => item.active)} onSaved={async (input) => { const live = editingEnrollment ? await updateLaunch({ id: editingEnrollment.id, ...input }) : await createLaunch(input); setBootstrap(live); setAdminData(await loadAdminData()); setEnrollmentOpen(false); setEditingEnrollment(null); setMessageIsError(false); setMessage(editingEnrollment ? 'Inscrição atualizada. O placar foi recalculado.' : 'Inscrição registrada. O placar foi atualizado.'); }} />
-    <NewCampaignDialog open={newCampaignOpen} onOpenChange={setNewCampaignOpen} onSave={async (input) => { setNewCampaignOpen(false); setPage('archive'); setMessageIsError(false); setMessage(`Prévia local: “${input.name}” foi configurada. A gravação do arquivo será conectada ao Apps Script na próxima etapa.`); }} />
+    <NewCampaignDialog open={newCampaignOpen} onOpenChange={setNewCampaignOpen} onSave={async (input) => {
+      if (bootstrap.campaign !== undefined) {
+        const result = await startNewCampaign(input);
+        setBootstrap(result.bootstrap);
+        setAdminData(result.adminData);
+        setNewCampaignOpen(false);
+        setPage('archive');
+        setMessageIsError(false);
+        setMessage(`Campanha “${result.campaign.name}” iniciada${result.archive ? ', com o resultado anterior arquivado.' : '.'}`);
+        return;
+      }
+      setNewCampaignOpen(false);
+      setPage('archive');
+      setMessageIsError(false);
+      setMessage(`Prévia local: “${input.name}” foi configurada. A gravação do arquivo será conectada ao Apps Script na próxima etapa.`);
+    }} />
   </>;
 }
 

@@ -21,10 +21,34 @@ export type EnrollmentRow = {
   createdBy?: string;
 };
 
+export type CampaignSummary = {
+  id: string;
+  name: string;
+  slug?: string;
+  startDate?: string;
+  endDate?: string;
+  status: string;
+  publishedVersion?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type BootstrapData = {
+  campaign?: CampaignSummary | null;
   participants: RankingRow[];
   products: Array<{ id: string; name: string }>;
   history: EnrollmentRow[];
+};
+
+export type ArchivedCampaign = {
+  id: string;
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  status: string;
+  archivedAt?: string;
+  participantCount: number;
+  totalRegistrations: number;
 };
 
 export type AdminData = {
@@ -59,6 +83,18 @@ export function loadBootstrap(signal?: AbortSignal): Promise<BootstrapData> {
 
 export function loadAdminData(signal?: AbortSignal): Promise<AdminData> {
   return postAction<AdminData>({ action: 'adminData' }, 'Não foi possível carregar os cadastros.', signal);
+}
+
+export function listCampaigns(signal?: AbortSignal): Promise<ArchivedCampaign[]> {
+  return postAction<ArchivedCampaign[]>({ action: 'listCampaigns' }, 'Não foi possível carregar o arquivo de campanhas.', signal);
+}
+
+export function getCampaign(id: string, signal?: AbortSignal): Promise<{ campaign: CampaignSummary; ranking: RankingRow[] }> {
+  return postAction<{ campaign: CampaignSummary; ranking: RankingRow[] }>({ action: 'getCampaign', id }, 'Não foi possível carregar a campanha arquivada.', signal);
+}
+
+export function startNewCampaign(input: { name: string; month: string; year: number; archiveCurrent: boolean }): Promise<{ campaign: CampaignSummary; archive: { campaign: CampaignSummary; ranking: RankingRow[] } | null; campaigns: ArchivedCampaign[]; bootstrap: BootstrapData; adminData: AdminData }> {
+  return postAction<{ campaign: CampaignSummary; archive: { campaign: CampaignSummary; ranking: RankingRow[] } | null; campaigns: ArchivedCampaign[]; bootstrap: BootstrapData; adminData: AdminData }>({ action: 'startNewCampaign', ...input }, 'Não foi possível iniciar a nova campanha.');
 }
 
 export function createLaunch(input: { participantId: string; productId: string; quantity: number; date: string; notes?: string }): Promise<BootstrapData> {
