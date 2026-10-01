@@ -14,6 +14,7 @@ import {
   getCampaignAssociations,
   loadAdminData,
   loadBootstrap,
+  loadScoreboard,
   listCampaigns,
   startNewCampaign,
   updateCampaignAssociations,
@@ -26,10 +27,12 @@ import {
   type ConnectionMode,
   type EnrollmentRow,
   type RankingRow,
+  type ScoreboardData,
 } from '@/lib/integration';
 
 type PageName = 'dashboard' | 'participants' | 'products' | 'enrollments' | 'archive';
 const emptyBootstrap: BootstrapData = { participants: [], products: [], history: [] };
+const emptyScoreboard: ScoreboardData = { ranking: [], version: 0, published: false };
 const emptyAdmin: AdminData = { participants: [], products: [] };
 const pageTitles: Record<PageName, string> = { dashboard: 'Visão geral', participants: 'Participantes', products: 'Produtos', enrollments: 'Inscrições', archive: 'Arquivo' };
 
@@ -47,6 +50,8 @@ export default function Home() {
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [campaigns, setCampaigns] = useState<ArchivedCampaign[]>([]);
   const [localPreviewCampaign, setLocalPreviewCampaign] = useState<CampaignSummary | null>(null);
+  const [scoreboardData, setScoreboardData] = useState<ScoreboardData>(emptyScoreboard);
+  const [scoreboardCompatibility, setScoreboardCompatibility] = useState(false);
   const [associationsOpen, setAssociationsOpen] = useState(false);
   const [associations, setAssociations] = useState<CampaignAssociations | null>(null);
 
@@ -71,19 +76,33 @@ export default function Home() {
 
   const refreshScoreboard = useCallback(async () => {
     try {
-      const live = await loadBootstrap();
-      setBootstrap(live);
+      const published = await loadScoreboard();
+      setScoreboardData(published);
+      setScoreboardCompatibility(false);
       setMode('live');
-      return live;
+      return published;
     } catch {
-      setMode('error');
-      return null;
+      try {
+        const live = await loadBootstrap();
+        const compatibility = { campaign: live.campaign, ranking: live.participants, version: 0, publishedAt: '', published: Boolean(live.participants.length) };
+        setScoreboardData(compatibility);
+        setScoreboardCompatibility(true);
+        setMode('live');
+        return compatibility;
+      } catch {
+        setMode('error');
+        return null;
+      }
     }
   }, []);
 
   useEffect(() => {
     if (!routeReady) return;
     const controller = new AbortController();
+    if (view === 'scoreboard') {
+      void refreshScoreboard();
+      return () => controller.abort();
+    }
     setMode('loading');
     void Promise.all([loadBootstrap(controller.signal), loadAdminData(controller.signal)]).then(async ([live, admin]) => {
       setBootstrap(live);
@@ -94,7 +113,7 @@ export default function Home() {
       if (!(error instanceof DOMException && error.name === 'AbortError')) setMode('error');
     });
     return () => controller.abort();
-  }, [routeReady]);
+  }, [routeReady, view, refreshScoreboard]);
 
   const mutate = async (action: string, input: Record<string, unknown>, success: string) => {
     setMessage('');
@@ -134,7 +153,7 @@ export default function Home() {
   const totalRegistrations = displayBootstrap.participants.reduce((sum, item) => sum + item.registrations, 0);
 
   if (!routeReady) return <LoadingScreen />;
-  if (view === 'scoreboard') return <Scoreboard ranking={bootstrap.participants} mode={mode} onReload={refreshScoreboard} />;
+  if (view === 'scoreboard') return <Scoreboard data={scoreboardData} compatibility={scoreboardCompatibility} mode={mode} onReload={refreshScoreboard} />;
 
   const navItems: Array<{ id: PageName; label: string; icon: typeof LayoutDashboard }> = [
     { id: 'dashboard', label: 'Visão geral', icon: LayoutDashboard },
@@ -329,10 +348,12 @@ function EmptyState({ text }: { text: string }) { return <div className="empty-s
 function Avatar({ name, url }: { name: string; url?: string }) { return url ? <img className="avatar large avatar-image" src={url} alt=""/> : <span className="avatar large">{name.slice(0,2).toUpperCase()}</span>; }
 function today() { return new Date().toISOString().slice(0,10); }
 function formatDate(value: string) { if (!value) return '—'; const date = new Date(value.length === 10 ? `${value}T12:00:00` : value); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('pt-BR'); }
+function formatDateTime(value: string) { if (!value) return '—'; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); }
 
 type ScoreMovement = { direction: 'up' | 'down' | 'same' | 'new'; delta: number; previousRegistrations?: number };
 
-function Scoreboard({ ranking, mode, onReload }: { ranking: RankingRow[]; mode: ConnectionMode; onReload: () => Promise<BootstrapData | null> }) {
+function Scoreboard({ data, compatibility, mode, onReload }: { data: ScoreboardData; compatibility: boolean; mode: ConnectionMode; onReload: () => Promise<ScoreboardData | null> }) {
+  const ranking = data.ranking;
   const previousRef = useRef<RankingRow[] | null>(null);
   const signatureRef = useRef('');
   const [movements, setMovements] = useState<Record<string, ScoreMovement>>({});
@@ -374,8 +395,8 @@ function Scoreboard({ ranking, mode, onReload }: { ranking: RankingRow[]; mode: 
   const podium = [ranking[1], ranking[0], ranking[2]].filter(Boolean);
   const rest = ranking.slice(3, 13);
   const motivation = scoreboardMotivation(ranking, movements, newLeader);
-  const connectionLabel = mode === 'error' ? 'Conexão instável' : mode === 'loading' ? 'Conectando' : 'Conectado';
-  const updatedLabel = lastUpdated ? lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+  const connectionLabel = mode === 'error' ? 'Conexão instável' : mode === 'loading' ? 'Conectando' : compatibility ? 'Modo compatibilidade' : 'Placar publicado';
+  const updatedLabel = data.publishedAt ? formatDateTime(data.publishedAt) : lastUpdated ? lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
 
   return <main className="scoreboard-shell min-h-screen text-white">
     <header className="scoreboard-header">
@@ -383,7 +404,7 @@ function Scoreboard({ ranking, mode, onReload }: { ranking: RankingRow[]; mode: 
       <div className="scoreboard-stats"><div><strong>{total}</strong><span>Total de inscrições</span></div><div><strong>{ranking.length}</strong><span>Participantes</span></div><div><strong>{updatedLabel}</strong><span>Última atualização</span></div></div>
       <div className="scoreboard-controls"><span className={`score-connection ${mode}`}><i/> {connectionLabel}</span><button className="score-reload" onClick={() => void onReload()} aria-label="Recarregar placar"><RefreshCw size={14}/> Atualizar</button></div>
     </header>
-    {mode === 'loading' && !ranking.length ? <section className="scoreboard-empty-screen"><div className="score-empty"><RefreshCw size={38}/><h2>Carregando ranking…</h2><p>Buscando os resultados mais recentes.</p></div></section> : ranking.length ? <section className={`scoreboard-main ${pulse ? 'scoreboard-pulse' : ''}`}>
+    {mode === 'loading' && !ranking.length ? <section className="scoreboard-empty-screen"><div className="score-empty"><RefreshCw size={38}/><h2>Carregando ranking…</h2><p>Buscando os resultados mais recentes.</p></div></section> : !data.published && !compatibility ? <section className="scoreboard-empty-screen"><div className="score-empty"><Trophy size={48}/><h2>Placar ainda não publicado</h2><p>A gestão ainda não publicou resultados para esta campanha.</p></div></section> : ranking.length ? <section className={`scoreboard-main ${pulse ? 'scoreboard-pulse' : ''}`}>
       {newLeader && <div className="leader-alert"><Crown size={17}/> Nova liderança: <strong>{ranking[0].name}</strong></div>}
       <div className="scoreboard-intro"><div><h2>Classificação atual</h2></div><p>{motivation}</p></div>
       <div className="scoreboard-grid">
@@ -392,8 +413,8 @@ function Scoreboard({ ranking, mode, onReload }: { ranking: RankingRow[]; mode: 
         </section>
         {rest.length > 0 && <section className="score-rankings" aria-label="Demais participantes"><div className="score-rankings-head"><span>Posição</span><span>Participante</span><span>Inscrições</span><span>Movimento</span></div>{rest.map((person, index) => { const position = index + 4; const above = ranking[position - 2]; const movement = movements[person.id]; const gap = above ? Math.max(above.registrations - person.registrations, 0) : 0; return <RankingLine key={person.id} person={person} position={position} movement={movement} gap={gap} tied={Boolean(above && above.registrations === person.registrations)}/>; })}</section>}
       </div>
-    </section> : <section className="scoreboard-empty-screen"><div className="score-empty"><Trophy size={48}/><h2>A competição vai começar</h2><p>As primeiras inscrições aparecerão aqui.</p></div></section>}
-    <footer className="score-ticker"><span className="live-dot"/><strong>Atualização automática a cada 15s</strong><p>{ranking[0] ? `${ranking[0].name} lidera com ${ranking[0].registrations} inscrições.` : 'Aguardando a primeira inscrição.'}</p><span>Placar comercial Capacity</span></footer>
+    </section> : <section className="scoreboard-empty-screen"><div className="score-empty"><Trophy size={48}/><h2>{compatibility ? 'A competição vai começar' : 'Placar ainda não publicado'}</h2><p>{compatibility ? 'As primeiras inscrições aparecerão aqui.' : 'A gestão ainda não publicou resultados para esta campanha.'}</p></div></section>}
+    <footer className="score-ticker"><span className="live-dot"/><strong>Atualização automática a cada 15s</strong><p>{ranking[0] ? `${ranking[0].name} lidera com ${ranking[0].registrations} inscrições.` : data.published ? 'Nenhum participante pontuou nesta publicação.' : 'Aguardando publicação da gestão.'}</p><span>{data.version ? `Versão publicada ${data.version}` : compatibility ? 'Modo compatibilidade' : 'Sem publicação'}</span></footer>
   </main>;
 }
 

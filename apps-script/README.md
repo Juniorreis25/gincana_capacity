@@ -11,7 +11,11 @@ Este diretório contém o backend JSON do MVP. O Site privado é o frontend ofic
 
 ## Operações ativas
 
-`bootstrap`, `adminData`, `listCampaigns`, `getCampaign`, `getCampaignAssociations`, `updateCampaignAssociations`, `startNewCampaign`, `createLaunch`, `updateLaunch`, `deleteLaunch` e o CRUD/ativação de participantes e produtos.
+`bootstrap`, `scoreboard`, `adminData`, `listCampaigns`, `getCampaign`, `getCampaignAssociations`, `updateCampaignAssociations`, `startNewCampaign`, `createLaunch`, `updateLaunch`, `deleteLaunch` e o CRUD/ativação de participantes e produtos.
+
+O Site usa `bootstrap` para a gestão e `scoreboard` para a TV. A TV lê somente
+`PLACAR_PUBLICADO`, nunca os lançamentos pendentes, e mostra a versão e a data
+da última publicação.
 
 As associações da campanha são salvas em uma operação protegida. Somente
 participantes e produtos ativos e associados à campanha atual podem receber

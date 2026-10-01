@@ -10,6 +10,7 @@ function doPost(e) {
   if (!isAuthorized_(body.token, action)) return json_(fail_('UNAUTHORIZED', 'Token de integração inválido.'));
   try {
     if (action === 'bootstrap') return json_(ok_(bootstrap_()));
+    if (action === 'scoreboard') return json_(ok_(scoreboard_()));
     if (action === 'listCampaigns') return json_(ok_(listCampaigns_()));
     if (action === 'getCampaign') return json_(ok_(getCampaign_(body)));
     if (action === 'getCampaignAssociations') return json_(ok_(campaignAssociations_(body)));

@@ -40,6 +40,14 @@ export type BootstrapData = {
   history: EnrollmentRow[];
 };
 
+export type ScoreboardData = {
+  campaign?: CampaignSummary | null;
+  ranking: RankingRow[];
+  version: number;
+  publishedAt?: string;
+  published: boolean;
+};
+
 export type ArchivedCampaign = {
   id: string;
   name: string;
@@ -82,6 +90,10 @@ async function postAction<T>(body: Record<string, unknown>, fallbackMessage: str
 
 export function loadBootstrap(signal?: AbortSignal): Promise<BootstrapData> {
   return postAction<BootstrapData>({ action: 'bootstrap' }, 'Não foi possível carregar os dados da planilha.', signal);
+}
+
+export function loadScoreboard(signal?: AbortSignal): Promise<ScoreboardData> {
+  return postAction<ScoreboardData>({ action: 'scoreboard' }, 'Não foi possível carregar o placar publicado.', signal);
 }
 
 export function loadAdminData(signal?: AbortSignal): Promise<AdminData> {

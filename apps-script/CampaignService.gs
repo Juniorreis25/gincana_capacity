@@ -166,6 +166,22 @@ function getCampaign_(input) {
   return { campaign: campaignPayload_(row), ranking: ranking };
 }
 
+function scoreboard_() {
+  var active = currentCampaign_();
+  if (!active) return { campaign: null, ranking: [], version: 0, publishedAt: '', published: false };
+  var campaignId = text_(active.ID);
+  var rows = rows_('PLACAR_PUBLICADO').filter(function (row) { return text_(row.GINCANA_ID) === campaignId; });
+  var version = rows.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, number_(active.VERSAO_PUBLICADA));
+  var publishedRows = rows.filter(function (row) { return number_(row.VERSAO) === version; }).sort(function (a, b) { return number_(a.POSICAO) - number_(b.POSICAO); });
+  return {
+    campaign: campaignPayload_(active),
+    ranking: publishedRows.map(function (row) { return { id: text_(row.PARTICIPANTE_ID), name: text_(row.NOME), avatarUrl: text_(row.AVATAR_URL), registrations: number_(row.INSCRICOES) }; }),
+    version: version,
+    publishedAt: publishedRows.length ? dateText_(publishedRows[0].PUBLICADO_EM) : '',
+    published: publishedRows.length > 0
+  };
+}
+
 function startNewCampaign_(input) {
   var values = validateCampaignInput_(input);
   var lock = LockService.getScriptLock();
