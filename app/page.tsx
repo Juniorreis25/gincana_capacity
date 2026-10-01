@@ -81,7 +81,11 @@ export default function Home() {
       setScoreboardCompatibility(false);
       setMode('live');
       return published;
-    } catch {
+    } catch (error) {
+      if (!(error instanceof Error && (error as Error & { code?: string }).code === 'ACTION_NOT_ALLOWED')) {
+        setMode('error');
+        return null;
+      }
       try {
         const live = await loadBootstrap();
         const compatibility = { campaign: live.campaign, ranking: live.participants, version: 0, publishedAt: '', published: Boolean(live.participants.length) };

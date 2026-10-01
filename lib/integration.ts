@@ -83,7 +83,9 @@ async function postAction<T>(body: Record<string, unknown>, fallbackMessage: str
   });
   const payload = (await response.json()) as IntegrationResponse<T>;
   if (!response.ok || !payload.ok || payload.data === undefined) {
-    throw new Error(payload.error?.message || fallbackMessage);
+    const error = new Error(payload.error?.message || fallbackMessage) as Error & { code?: string };
+    error.code = payload.error?.code;
+    throw error;
   }
   return payload.data;
 }
