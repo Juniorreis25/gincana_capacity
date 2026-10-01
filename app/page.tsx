@@ -175,7 +175,7 @@ export default function Home() {
       </aside>
       <section className="main-panel">
         <header className="topbar">
-          <div><div className="topbar-kicker"><p className="eyebrow">Gestão comercial</p><ConnectionBadge mode={mode} hasData={adminData.participants.length + adminData.products.length > 0} /></div><h1>{pageTitles[page]}</h1></div>
+          <div><div className="topbar-kicker"><p className="eyebrow">Gestão comercial</p><ConnectionBadge mode={mode} hasData={adminData.participants.length + adminData.products.length > 0} campaignApiReady={bootstrap.campaign !== undefined || Boolean(localPreviewCampaign)} /></div><h1>{pageTitles[page]}</h1></div>
           <div className="topbar-actions"><Button variant="outline" className="rounded-full" onClick={openScoreboard}><Eye size={17}/> Ver placar da TV</Button><Button variant="outline" className="rounded-full" disabled={mode !== 'live'} onClick={openNewCampaign}><CalendarDays size={17}/> Nova campanha</Button><Button className="primary-action rounded-full" disabled={mode !== 'live'} onClick={openNewEnrollment}><Plus size={18}/> Registrar inscrição</Button></div>
         </header>
         <div className="content-wrap">
@@ -227,9 +227,10 @@ export default function Home() {
   </>;
 }
 
-function ConnectionBadge({ mode, hasData }: { mode: ConnectionMode; hasData: boolean }) {
-  const text = mode === 'loading' ? 'Carregando dados…' : mode === 'error' ? 'Erro de conexão' : hasData ? 'Conectado à planilha' : 'Conectado · base vazia';
-  return <span className={`integration-badge ${mode}`} aria-live="polite">{text}</span>;
+function ConnectionBadge({ mode, hasData, campaignApiReady }: { mode: ConnectionMode; hasData: boolean; campaignApiReady: boolean }) {
+  const compatibility = mode === 'live' && !campaignApiReady;
+  const text = mode === 'loading' ? 'Carregando dados…' : mode === 'error' ? 'Erro de conexão' : compatibility ? 'Compatibilidade · Apps Script antigo' : hasData ? 'Conectado à planilha' : 'Conectado · base vazia';
+  return <span className={`integration-badge ${compatibility ? 'demo' : mode}`} aria-live="polite">{text}</span>;
 }
 
 function LoadingScreen() { return <main className="loading-screen" aria-live="polite"><p>Carregando o painel…</p></main>; }
