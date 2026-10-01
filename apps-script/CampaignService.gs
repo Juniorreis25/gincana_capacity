@@ -157,7 +157,11 @@ function rankingForLaunches_(launches) {
   var products = rows_('PRODUTOS');
   var participantById = indexBy_(participants, 'ID');
   var activeProducts = products.reduce(function (result, row) { if (isActive_(row.ATIVO)) result[text_(row.ID)] = true; return result; }, {});
-  var totals = launches.filter(function (launch) { return activeProducts[text_(launch.PRODUTO_ID)] && isActiveParticipantId_(participantById, launch.PARTICIPANTE_ID); }).reduce(function (result, launch) {
+  var totals = launches.filter(function (launch) {
+    return text_(launch.STATUS).toUpperCase() === 'ATIVO'
+      && activeProducts[text_(launch.PRODUTO_ID)]
+      && isActiveParticipantId_(participantById, launch.PARTICIPANTE_ID);
+  }).reduce(function (result, launch) {
     var id = text_(launch.PARTICIPANTE_ID); result[id] = (result[id] || 0) + number_(launch.INSCRICOES_DELTA); return result;
   }, {});
   return participants.map(function (participant) { return { id: text_(participant.ID), name: text_(participant.NOME), team: text_(participant.EQUIPE_ID), initials: initials_(participant.NOME), registrations: totals[text_(participant.ID)] || 0 }; }).filter(function (row) { return row.registrations > 0; }).sort(function (a, b) { return b.registrations - a.registrations || a.name.localeCompare(b.name); });

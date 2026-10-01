@@ -14,3 +14,30 @@ Este diretório contém o backend JSON do MVP. O Site privado é o frontend ofic
 `bootstrap`, `adminData`, `listCampaigns`, `getCampaign`, `startNewCampaign`, `createLaunch`, `updateLaunch`, `deleteLaunch` e o CRUD/ativação de participantes e produtos.
 
 O ranking é recalculado no Apps Script a cada leitura e considera somente inscrições ativas vinculadas a participantes e produtos ativos dentro da campanha ativa. Enquanto não houver campanha ativa, o backend mantém compatibilidade com os lançamentos legados sem `GINCANA_ID`. Ao iniciar uma nova campanha, o fluxo protegido pode arquivar o ranking anterior em `PLACAR_PUBLICADO`/`PUBLICACOES`, encerrar a campanha anterior, preservar os participantes e criar um novo contexto operacional. Uma base vazia retorna listas vazias com sucesso; não há dados demonstrativos de fallback.
+
+## Migração inicial da base legada
+
+Antes de iniciar a primeira campanha mensal, a migração de lançamentos sem
+`GINCANA_ID` deve ser feita manualmente no editor do Apps Script. As funções
+`createOfficialBackup_`, `legacyMigrationPreview_` e
+`migrateLegacyCampaign_` terminam com `_` de propósito: não são ações aceitas
+pelo proxy e não podem ser chamadas pelo Site.
+
+1. Cole todos os arquivos deste diretório no projeto Apps Script e salve.
+2. Execute `legacyMigrationPreview_()` e revise as quantidades retornadas.
+3. Confirme que não existe campanha `ATIVA` e que a prévia identifica somente
+   os lançamentos históricos esperados.
+4. Execute `migrateLegacyCampaign_({ confirmation: 'MIGRATE_LEGACY', name: 'Campanha Setembro 2026', startDate: '2026-09-01', endDate: '2026-09-30', backupLabel: 'setembro-2026' })`.
+5. Guarde o `backup.id` e o `backup.url` retornados. A rotina cria uma cópia
+   no Google Drive antes de escrever na planilha.
+
+A rotina cria a campanha histórica como `ENCERRADA`, associa os lançamentos
+ativos, participantes e produtos, grava o snapshot em `PLACAR_PUBLICADO`,
+registra `PUBLICACOES` e `AUDITORIA`, e não cria uma campanha operacional nova.
+Em caso de falha, as abas alteradas são restauradas e o erro é auditado. Depois
+da validação, use o botão **Nova campanha** no Site para iniciar a campanha
+seguinte.
+
+Não execute a migração novamente se já existir uma campanha ativa ou se os
+lançamentos já estiverem vinculados. O backup é uma cópia de recuperação e não
+substitui a conferência manual do resultado arquivado.
