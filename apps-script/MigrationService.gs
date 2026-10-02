@@ -92,7 +92,7 @@ function migrateLegacyCampaign_(input) {
       SLUG: slugify_(values.name),
       DATA_INICIO: values.startDate,
       DATA_FIM: values.endDate,
-      STATUS: 'ENCERRADA',
+      STATUS: 'ARQUIVADA',
       VERSAO_PUBLICADA: 1,
       CRIADO_EM: now,
       ATUALIZADO_EM: now

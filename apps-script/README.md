@@ -22,7 +22,7 @@ participantes e produtos ativos e associados à campanha atual podem receber
 novos lançamentos ou aparecer no ranking. A atualização das duas abas de
 associação usa rollback se alguma etapa falhar.
 
-O ranking é recalculado no Apps Script a cada leitura e considera somente inscrições ativas vinculadas a participantes e produtos ativos dentro da campanha ativa. Enquanto não houver campanha ativa, o backend mantém compatibilidade com os lançamentos legados sem `GINCANA_ID`. Ao iniciar uma nova campanha, o fluxo protegido pode arquivar o ranking anterior em `PLACAR_PUBLICADO`/`PUBLICACOES`, encerrar a campanha anterior, preservar os participantes e criar um novo contexto operacional. Uma base vazia retorna listas vazias com sucesso; não há dados demonstrativos de fallback.
+O ranking é recalculado no Apps Script a cada leitura e considera somente inscrições ativas vinculadas a participantes e produtos ativos dentro da campanha ativa. Enquanto não houver campanha ativa, o backend mantém compatibilidade com os lançamentos legados sem `GINCANA_ID`. Ao iniciar uma nova campanha, o fluxo protegido pode arquivar o ranking anterior em `PLACAR_PUBLICADO`/`PUBLICACOES`, marcar a campanha anterior como `ARQUIVADA`, preservar os participantes e criar um novo contexto operacional. Se o usuário optar por não arquivar, a campanha anterior fica `ENCERRADA` e não aparece no menu Arquivo. Uma base vazia retorna listas vazias com sucesso; não há dados demonstrativos de fallback.
 
 ## Migração inicial da base legada
 
@@ -42,7 +42,7 @@ pelo proxy e não podem ser chamadas pelo Site.
 6. Guarde o `backup.id` e o `backup.url` retornados. A rotina cria uma cópia
    no Google Drive antes de escrever na planilha.
 
-A rotina cria a campanha histórica como `ENCERRADA`, associa os lançamentos
+A rotina cria a campanha histórica como `ARQUIVADA`, associa os lançamentos
 ativos, participantes e produtos, grava o snapshot em `PLACAR_PUBLICADO`,
 registra `PUBLICACOES` e `AUDITORIA`, e não cria uma campanha operacional nova.
 Em caso de falha, as abas alteradas são restauradas e o erro é auditado. Depois

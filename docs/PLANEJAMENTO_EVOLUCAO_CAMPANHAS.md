@@ -59,6 +59,8 @@ Estados previstos:
 
 Campos relevantes: `ID`, `NOME`, `SLUG`, `DATA_INICIO`, `DATA_FIM`, `STATUS`, `VERSAO_PUBLICADA`, `CRIADO_EM` e `ATUALIZADO_EM`.
 
+Regra de ciclo de vida: `ATIVA` é a campanha operacional atual; `ARQUIVADA` identifica somente uma campanha cujo resultado foi explicitamente preservado no Arquivo; `ENCERRADA` identifica uma campanha finalizada sem arquivamento e, portanto, não listada no menu Arquivo.
+
 ### `GINCANA_PARTICIPANTES`
 
 Representará quais participantes fazem parte da campanha. O participante continua sendo um cadastro mestre reutilizável.
@@ -106,7 +108,7 @@ Criar uma operação única, por exemplo `startNewCampaign`, que:
 4. calcula o ranking atual no servidor;
 5. grava o snapshot geral no `PLACAR_PUBLICADO`;
 6. grava o registro correspondente em `PUBLICACOES`;
-7. marca a campanha anterior como `ENCERRADA`;
+7. marca a campanha anterior como `ARQUIVADA` quando o usuário confirmou o arquivamento, ou como `ENCERRADA` quando optou por não arquivar;
 8. cria a nova campanha como `ATIVA`;
 9. atualiza a configuração da campanha operacional;
 10. mantém os participantes no cadastro mestre;
@@ -179,7 +181,7 @@ Executar antes de liberar o botão para o usuário:
 5. Criar associações dos 11 produtos usados.
 6. Recalcular o ranking final de setembro.
 7. Gravar o snapshot arquivado, identificando-o como migração histórica.
-8. Marcar setembro como `ENCERRADA`.
+8. Marcar setembro como `ARQUIVADA`.
 9. Criar outubro como `RASCUNHO`.
 10. Ativar outubro somente após validação da gestão.
 
@@ -257,4 +259,3 @@ A evolução será considerada pronta quando:
 - exclusão física automática de histórico;
 - migração para banco SQL;
 - critérios de pontos, valor, bônus e penalidades.
-

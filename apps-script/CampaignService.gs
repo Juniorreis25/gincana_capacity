@@ -141,16 +141,39 @@ function campaignPayload_(row) {
   };
 }
 
+function archivePublication_(campaignId) {
+  var publications = rows_('PUBLICACOES').filter(function (row) {
+    if (text_(row.GINCANA_ID) !== text_(campaignId)) return false;
+    var note = text_(row.OBSERVACAO).toUpperCase();
+    if (note.indexOf('ARQUIVAMENTO') !== -1 || note.indexOf('SNAPSHOT HISTÓRICO') !== -1 || note.indexOf('SNAPSHOT HISTORICO') !== -1) return true;
+    try {
+      var summary = JSON.parse(text_(row.RESUMO_JSON) || '{}');
+      var type = text_(summary.tipo).toUpperCase();
+      return type === 'ARQUIVAMENTO' || type === 'MIGRACAO_HISTORICA';
+    } catch (error) {
+      return false;
+    }
+  }).sort(function (a, b) {
+    var aDate = new Date(a.PUBLICADO_EM || a.CRIADO_EM || 0).getTime();
+    var bDate = new Date(b.PUBLICADO_EM || b.CRIADO_EM || 0).getTime();
+    return aDate - bDate;
+  });
+  return publications.length ? publications[publications.length - 1] : null;
+}
+
 function listCampaigns_() {
+  var active = currentCampaign_();
+  var activeId = active ? text_(active.ID) : '';
   return rows_('GINCANAS').filter(function (row) {
     var status = text_(row.STATUS).toUpperCase();
-    return status === 'ENCERRADA' || status === 'ARQUIVADA';
+    return text_(row.ID) !== activeId && (status === 'ARQUIVADA' || status === 'ENCERRADA') && Boolean(archivePublication_(row.ID));
   }).map(function (row) {
     var id = text_(row.ID);
+    var archivedPublication = archivePublication_(id);
     var snapshot = latestPublishedRows_(id);
     return {
       id: id, name: text_(row.NOME), startDate: dateText_(row.DATA_INICIO), endDate: dateText_(row.DATA_FIM),
-      status: text_(row.STATUS), archivedAt: dateText_(row.ATUALIZADO_EM || row.CRIADO_EM),
+      status: 'ARQUIVADA', archivedAt: dateText_(archivedPublication && (archivedPublication.PUBLICADO_EM || archivedPublication.CRIADO_EM) || row.ATUALIZADO_EM || row.CRIADO_EM),
       participantCount: snapshot.length,
       totalRegistrations: snapshot.reduce(function (sum, item) { return sum + number_(item.INSCRICOES); }, 0)
     };
@@ -161,7 +184,7 @@ function getCampaign_(input) {
   var id = text_(input && input.id);
   if (!id) return campaignPayload_(currentCampaign_());
   var row = rows_('GINCANAS').find(function (item) { return text_(item.ID) === id; });
-  if (!row) throw new Error('CAMPAIGN_NOT_FOUND: Campanha não encontrada.');
+  if (!row || text_(row.STATUS).toUpperCase() === 'ATIVA' || !archivePublication_(id)) throw new Error('CAMPAIGN_NOT_ARCHIVED: A campanha não possui um resultado arquivado.');
   var ranking = publishedRanking_(id);
   return { campaign: campaignPayload_(row), ranking: ranking };
 }
@@ -214,7 +237,7 @@ function startNewCampaign_(input) {
       previousLaunches.forEach(function (launch) {
         if (!text_(launch.GINCANA_ID)) updateObjectById_('LANCAMENTOS', text_(launch.ID), { GINCANA_ID: archiveId });
       });
-      updateObjectById_('GINCANAS', archiveId, { STATUS: 'ENCERRADA', VERSAO_PUBLICADA: version, ATUALIZADO_EM: now });
+      updateObjectById_('GINCANAS', archiveId, { STATUS: 'ARQUIVADA', VERSAO_PUBLICADA: version, ATUALIZADO_EM: now });
       archive = { campaign: campaignPayload_(rows_('GINCANAS').find(function (row) { return text_(row.ID) === archiveId; })), ranking: ranking };
     } else if (previous) {
       updateObjectById_('GINCANAS', previousId, { STATUS: 'ENCERRADA', ATUALIZADO_EM: now });
