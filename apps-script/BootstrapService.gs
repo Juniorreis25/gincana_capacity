@@ -57,7 +57,9 @@ function bootstrap_() {
       date: dateText_(launch.DATA_OCORRENCIA || launch.CRIADO_EM),
       notes: text_(launch.OBSERVACAO),
       status: !activeParticipantById[text_(launch.PARTICIPANTE_ID)] || !activeProductById[text_(launch.PRODUTO_ID)] ? 'INATIVADO' : text_(launch.STATUS),
-      createdBy: text_(launch.CRIADO_POR)
+      createdBy: text_(launch.CRIADO_POR),
+      publishedVersion: text_(launch.PUBLICADO_NA_VERSAO),
+      pendingPublication: text_(launch.STATUS).toUpperCase() === 'ATIVO' && !text_(launch.PUBLICADO_NA_VERSAO)
     };
   }).sort(function (a, b) {
     return a.date < b.date ? 1 : -1;

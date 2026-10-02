@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, ArrowDown, ArrowUp, CalendarDays, Crown, Eye, LayoutDashboard, ListChecks, Medal, Minus, Package, Pencil, Plus, RefreshCw, Trash2, Trophy, UserCheck, Users } from 'lucide-react';
+import { Archive, ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, CalendarDays, CheckCircle2, Crown, Eye, LayoutDashboard, ListChecks, Medal, Minus, Package, Pencil, Plus, RefreshCw, Trash2, Trophy, UserCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +14,10 @@ import {
   getCampaignAssociations,
   loadAdminData,
   loadBootstrap,
+  loadPreview,
   loadScoreboard,
   listCampaigns,
+  publishScoreboard,
   startNewCampaign,
   updateCampaignAssociations,
   updateLaunch,
@@ -26,6 +28,7 @@ import {
   type CampaignAssociations,
   type ConnectionMode,
   type EnrollmentRow,
+  type PreviewData,
   type RankingRow,
   type ScoreboardData,
 } from '@/lib/integration';
@@ -52,6 +55,10 @@ export default function Home() {
   const [localPreviewCampaign, setLocalPreviewCampaign] = useState<CampaignSummary | null>(null);
   const [scoreboardData, setScoreboardData] = useState<ScoreboardData>(emptyScoreboard);
   const [scoreboardCompatibility, setScoreboardCompatibility] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [associationsOpen, setAssociationsOpen] = useState(false);
   const [associations, setAssociations] = useState<CampaignAssociations | null>(null);
 
@@ -151,6 +158,36 @@ export default function Home() {
       setMessage(error instanceof Error ? error.message : 'Não foi possível carregar as associações.');
     });
   };
+  const openPreview = async () => {
+    setPreviewLoading(true);
+    setMessage('');
+    try {
+      setPreviewData(await loadPreview());
+      setPreviewOpen(true);
+    } catch (error) {
+      setMessageIsError(true);
+      setMessage(error instanceof Error ? error.message : 'Não foi possível gerar a prévia do placar.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+  const publish = async () => {
+    setPublishing(true);
+    try {
+      const result = await publishScoreboard();
+      setBootstrap(result.bootstrap);
+      setPreviewOpen(false);
+      setPreviewData(null);
+      setMessageIsError(false);
+      setMessage(`Placar publicado na versão ${result.version}.`);
+    } catch (error) {
+      setMessageIsError(true);
+      setMessage(error instanceof Error ? error.message : 'Não foi possível publicar o placar.');
+      throw error;
+    } finally {
+      setPublishing(false);
+    }
+  };
   const displayBootstrap = localPreviewCampaign ? { ...bootstrap, participants: [], products: [], history: [] } : bootstrap;
   const displayAdminData = localPreviewCampaign ? { ...adminData, products: [] } : adminData;
   const activeCampaign = localPreviewCampaign || bootstrap.campaign || null;
@@ -181,7 +218,7 @@ export default function Home() {
         <div className="content-wrap">
           {message && <p className={messageIsError ? 'success-banner error' : 'success-banner'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
           {mode === 'error' && <ConnectionError onRetry={() => { void refreshAll().catch(() => undefined); }} />}
-          {page === 'dashboard' && <Dashboard participants={displayAdminData.participants.filter((item) => item.active).length} products={displayAdminData.products.filter((item) => item.active).length} total={totalRegistrations} leader={displayBootstrap.participants[0]} history={displayBootstrap.history} campaign={activeCampaign} campaignApiReady={bootstrap.campaign !== undefined || Boolean(localPreviewCampaign)} previewMode={Boolean(localPreviewCampaign)} onConfigureAssociations={openAssociations} />}
+          {page === 'dashboard' && <Dashboard participants={displayAdminData.participants.filter((item) => item.active).length} products={displayAdminData.products.filter((item) => item.active).length} total={totalRegistrations} leader={displayBootstrap.participants[0]} history={displayBootstrap.history} campaign={activeCampaign} campaignApiReady={bootstrap.campaign !== undefined || Boolean(localPreviewCampaign)} previewMode={Boolean(localPreviewCampaign)} onConfigureAssociations={openAssociations} onPreview={openPreview} previewLoading={previewLoading} />}
           {page === 'participants' && <ParticipantsView data={displayAdminData} previewMode={Boolean(localPreviewCampaign)} onMutate={mutate} />}
           {page === 'products' && <ProductsView data={displayAdminData} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} previewMode={Boolean(localPreviewCampaign)} onMutate={mutate} />}
           {page === 'enrollments' && <EnrollmentsView history={displayBootstrap.history} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} onNew={openNewEnrollment} onEdit={(row) => { setEditingEnrollment(row); setEnrollmentOpen(true); }} onDeleted={async (id) => { setBootstrap(await deleteLaunch(id)); setMessageIsError(false); setMessage('Inscrição excluída. O placar foi atualizado.'); }} />}
@@ -189,7 +226,8 @@ export default function Home() {
         </div>
       </section>
     </main>
-    <EnrollmentDialog open={enrollmentOpen} onOpenChange={setEnrollmentOpen} editing={editingEnrollment} participants={displayAdminData.participants.filter((item) => item.active)} products={displayAdminData.products.filter((item) => item.active)} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} onSaved={async (input) => { const live = editingEnrollment ? await updateLaunch({ id: editingEnrollment.id, ...input }) : await createLaunch(input); setBootstrap(live); setAdminData(await loadAdminData()); setEnrollmentOpen(false); setEditingEnrollment(null); setMessageIsError(false); setMessage(editingEnrollment ? 'Inscrição atualizada. O placar foi recalculado.' : 'Inscrição registrada. O placar foi atualizado.'); }} />
+    <EnrollmentDialog open={enrollmentOpen} onOpenChange={setEnrollmentOpen} editing={editingEnrollment} participants={displayAdminData.participants.filter((item) => item.active)} products={displayAdminData.products.filter((item) => item.active)} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} onSaved={async (input) => { const live = editingEnrollment ? await updateLaunch({ id: editingEnrollment.id, ...input }) : await createLaunch(input); setBootstrap(live); setAdminData(await loadAdminData()); setEnrollmentOpen(false); setEditingEnrollment(null); setMessageIsError(false); setMessage(editingEnrollment ? 'Inscrição atualizada e pendente de publicação.' : 'Inscrição registrada e pendente de publicação.'); }} />
+    <PublicationDialog open={previewOpen} onOpenChange={setPreviewOpen} pending={displayBootstrap.history.filter((row) => row.pendingPublication).length} total={totalRegistrations} preview={previewData} publishing={publishing} onPublish={publish} />
     <NewCampaignDialog open={newCampaignOpen} onOpenChange={setNewCampaignOpen} onSave={async (input) => {
       if (bootstrap.campaign !== undefined) {
         const result = await startNewCampaign(input);
@@ -237,14 +275,23 @@ function LoadingScreen() { return <main className="loading-screen" aria-live="po
 
 function ConnectionError({ onRetry }: { onRetry: () => void }) { return <section className="connection-error"><div><strong>Não foi possível acessar a planilha.</strong><span>Os últimos dados válidos foram mantidos. Tente novamente.</span></div><Button variant="outline" onClick={onRetry}><RefreshCw size={16}/> Tentar novamente</Button></section>; }
 
-function Dashboard({ participants, products, total, leader, history, campaign, campaignApiReady, previewMode, onConfigureAssociations }: { participants: number; products: number; total: number; leader?: RankingRow; history: EnrollmentRow[]; campaign: CampaignSummary | null; campaignApiReady: boolean; previewMode: boolean; onConfigureAssociations: () => void }) {
+function Dashboard({ participants, products, total, leader, history, campaign, campaignApiReady, previewMode, onConfigureAssociations, onPreview, previewLoading }: { participants: number; products: number; total: number; leader?: RankingRow; history: EnrollmentRow[]; campaign: CampaignSummary | null; campaignApiReady: boolean; previewMode: boolean; onConfigureAssociations: () => void; onPreview: () => Promise<void>; previewLoading: boolean }) {
+  const pending = history.filter((row) => row.pendingPublication);
+  const pendingTotal = pending.reduce((sum, row) => sum + row.quantity, 0);
+  const pendingParticipants = new Set(pending.map((row) => row.participantId)).size;
   return <div className="simple-dashboard">
     {campaignApiReady && <section className={campaign ? 'campaign-context-card' : 'campaign-context-card empty'}><div><p className="eyebrow">Campanha atual</p><h2>{campaign?.name || 'Nenhuma campanha ativa'}</h2>{campaign && <span>{formatDate(campaign.startDate || '')} a {formatDate(campaign.endDate || '')}</span>}</div><div className="campaign-context-actions"><strong>{campaign ? 'ATIVA' : 'Aguardando criação'}</strong>{campaign && <Button variant="outline" disabled={previewMode} onClick={onConfigureAssociations}>Configurar associações</Button>}</div></section>}
+    {!previewMode && pending.length > 0 && <section className="status-banner"><div className="status-icon"><ArrowUpRight size={20}/></div><div className="status-copy"><strong>{pending.length} alterações aguardam publicação</strong><span>{pendingTotal} inscrições líquidas · {pendingParticipants} participantes afetadas · a TV continua mostrando a última versão publicada.</span></div><Button className="publish-button" disabled={previewLoading} onClick={() => { void onPreview(); }}>{previewLoading ? 'Gerando prévia…' : 'Revisar e publicar'} <ArrowUpRight size={16}/></Button></section>}
     <section className="metrics-grid simple-metrics">
       <Metric label="Participantes ativos" value={String(participants)} icon={<UserCheck/>}/><Metric label="Produtos ativos" value={String(products)} icon={<Package/>}/><Metric label="Total de inscrições" value={String(total)} icon={<ListChecks/>}/><Metric label="Líder atual" value={leader?.name || 'Ainda não definido'} detail={leader ? `${leader.registrations} inscrições` : 'Aguardando registros'} icon={<Medal/>} featured/>
     </section>
     <RecentEnrollments history={history.slice(0, 6)} />
   </div>;
+}
+
+function PublicationDialog({ open, onOpenChange, pending, total, preview, publishing, onPublish }: { open: boolean; onOpenChange: (open: boolean) => void; pending: number; total: number; preview: PreviewData | null; publishing: boolean; onPublish: () => Promise<void> }) {
+  const changes = preview?.changes || [];
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="publication-dialog"><DialogHeader><DialogTitle>Prévia da atualização</DialogTitle><DialogDescription>Confira o cálculo do servidor antes de liberar a nova versão para a TV.</DialogDescription></DialogHeader><div className="preview-summary"><div><span>Alterações pendentes</span><strong>{preview?.pendingCount ?? pending}</strong></div><div><span>Inscrições publicadas</span><strong>{preview?.publishedTotal ?? 0}</strong></div><ArrowUpRight/><div><span>Novo total</span><strong>{preview?.currentTotal ?? total}</strong></div></div><div className="preview-list"><p className="eyebrow">Comparação com a versão {preview?.publishedVersion ?? 0}</p>{changes.length ? changes.map((row) => <div key={row.id}><span className="avatar">{row.initials || row.name.slice(0, 2).toUpperCase()}</span><strong>{row.name}</strong><span>{row.previousPosition ? `${row.previousPosition}º → ${row.newPosition || '—'}º` : `— → ${row.newPosition || '—'}º`} · {row.previousRegistrations} → {row.newRegistrations} inscrições · {row.movement}</span></div>) : <p>Nenhuma alteração pendente.</p>}</div><div className="publication-warning"><RefreshCw size={18}/><p><strong>A versão anterior será preservada.</strong><span>A TV só mudará após a confirmação no servidor.</span></p></div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)} disabled={publishing}><ArrowLeft size={16}/> Cancelar e revisar</Button><Button className="primary-action" onClick={() => { void onPublish().catch(() => undefined); }} disabled={publishing || !(preview?.pendingCount ?? pending)}><CheckCircle2 size={17}/> {publishing ? 'Publicando…' : 'Confirmar atualização'}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function Metric({ label, value, detail, icon, featured = false }: { label: string; value: string; detail?: string; icon: React.ReactNode; featured?: boolean }) { return <article className={featured ? 'metric-card featured' : 'metric-card'}><div className="metric-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</div></article>; }
@@ -309,7 +356,7 @@ function EnrollmentDialog({ open, onOpenChange, editing, participants, products,
   const [participantId, setParticipantId] = useState(''); const [productId, setProductId] = useState(''); const [quantity, setQuantity] = useState(1); const [date, setDate] = useState(today()); const [notes, setNotes] = useState(''); const [saving, setSaving] = useState(false); const [error, setError] = useState('');
   useEffect(() => { if (!open) return; setParticipantId(editing?.participantId || participants[0]?.id || ''); setProductId(editing?.productId || products[0]?.id || ''); setQuantity(editing?.quantity || 1); setDate(editing?.date?.slice(0,10) || today()); setNotes(editing?.notes || ''); setError(''); }, [open, editing, participants, products]);
   const canSave = participantId && productId && Number.isInteger(quantity) && quantity > 0 && date;
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="entity-dialog enrollment-dialog"><DialogHeader><DialogTitle>{editing ? 'Editar inscrição' : 'Registrar inscrição'}</DialogTitle><DialogDescription>O placar será recalculado automaticamente após salvar.</DialogDescription></DialogHeader>{participants.length && products.length ? <div className="form-grid"><Field label="Participante" id="enrollment-participant"><select id="enrollment-participant" value={participantId} onChange={(e) => setParticipantId(e.target.value)}>{participants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Produto" id="enrollment-product"><select id="enrollment-product" value={productId} onChange={(e) => setProductId(e.target.value)}>{products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Quantidade" id="enrollment-quantity"><Input id="enrollment-quantity" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}/></Field><Field label="Data" id="enrollment-date"><Input id="enrollment-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}/></Field><div className="field full"><Label htmlFor="enrollment-notes">Observação (opcional)</Label><Input id="enrollment-notes" value={notes} onChange={(e) => setNotes(e.target.value)}/></div></div> : <EmptyState text={campaignActive ? 'Cadastre um produto associado à campanha atual antes de registrar uma inscrição.' : 'Cadastre ao menos uma participante e um produto ativos antes de registrar uma inscrição.'}/>} {error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" disabled={saving || !canSave} onClick={() => { setSaving(true); setError(''); void onSaved({ participantId, productId, quantity, date, notes: notes.trim() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.')).finally(() => setSaving(false)); }}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Registrar inscrição'}</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="entity-dialog enrollment-dialog"><DialogHeader><DialogTitle>{editing ? 'Editar inscrição' : 'Registrar inscrição'}</DialogTitle><DialogDescription>A inscrição ficará pendente até a gestão confirmar a publicação do placar.</DialogDescription></DialogHeader>{participants.length && products.length ? <div className="form-grid"><Field label="Participante" id="enrollment-participant"><select id="enrollment-participant" value={participantId} onChange={(e) => setParticipantId(e.target.value)}>{participants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Produto" id="enrollment-product"><select id="enrollment-product" value={productId} onChange={(e) => setProductId(e.target.value)}>{products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Quantidade" id="enrollment-quantity"><Input id="enrollment-quantity" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}/></Field><Field label="Data" id="enrollment-date"><Input id="enrollment-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}/></Field><div className="field full"><Label htmlFor="enrollment-notes">Observação (opcional)</Label><Input id="enrollment-notes" value={notes} onChange={(e) => setNotes(e.target.value)}/></div></div> : <EmptyState text={campaignActive ? 'Cadastre um produto associado à campanha atual antes de registrar uma inscrição.' : 'Cadastre ao menos uma participante e um produto ativos antes de registrar uma inscrição.'}/>} {error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" disabled={saving || !canSave} onClick={() => { setSaving(true); setError(''); void onSaved({ participantId, productId, quantity, date, notes: notes.trim() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.')).finally(() => setSaving(false)); }}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Registrar inscrição'}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function NewCampaignDialog({ open, onOpenChange, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; onSave: (input: { name: string; month: string; year: number; archiveCurrent: boolean }) => Promise<void> }) {
@@ -401,7 +448,7 @@ function Scoreboard({ data, compatibility, mode, onReload }: { data: ScoreboardD
   const podium = [ranking[1], ranking[0], ranking[2]].filter(Boolean);
   const rest = ranking.slice(3, 13);
   const motivation = scoreboardMotivation(ranking, movements, newLeader);
-  const connectionLabel = mode === 'error' ? 'Conexão instável' : mode === 'loading' ? 'Conectando' : compatibility ? 'Modo compatibilidade' : 'Placar publicado';
+  const connectionLabel = mode === 'error' ? 'Conexão instável' : mode === 'loading' ? 'Conectando' : compatibility ? 'Modo compatibilidade' : data.published ? 'Placar publicado' : 'Conectado · sem publicação';
   const updatedLabel = data.publishedAt ? formatDateTime(data.publishedAt) : lastUpdated ? lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
 
   return <main className="scoreboard-shell min-h-screen text-white">

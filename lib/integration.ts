@@ -19,6 +19,32 @@ export type EnrollmentRow = {
   notes?: string;
   status: string;
   createdBy?: string;
+  publishedVersion?: string;
+  pendingPublication?: boolean;
+};
+
+export type PreviewChange = {
+  id: string;
+  name: string;
+  team?: string;
+  initials?: string;
+  previousPosition: number | null;
+  newPosition: number | null;
+  previousRegistrations: number;
+  newRegistrations: number;
+  movement: 'subida' | 'descida' | 'manutencao' | 'nova';
+  positionDelta: number | null;
+};
+
+export type PreviewData = {
+  game: { id: string; name: string };
+  currentTotal: number;
+  publishedTotal: number;
+  pendingCount: number;
+  publishedVersion: number;
+  newLeader: string;
+  leaderChanged: boolean;
+  changes: PreviewChange[];
 };
 
 export type CampaignSummary = {
@@ -96,6 +122,14 @@ export function loadBootstrap(signal?: AbortSignal): Promise<BootstrapData> {
 
 export function loadScoreboard(signal?: AbortSignal): Promise<ScoreboardData> {
   return postAction<ScoreboardData>({ action: 'scoreboard' }, 'Não foi possível carregar o placar publicado.', signal);
+}
+
+export function loadPreview(): Promise<PreviewData> {
+  return postAction<PreviewData>({ action: 'preview' }, 'Não foi possível gerar a prévia do placar.');
+}
+
+export function publishScoreboard(): Promise<{ version: number; bootstrap: BootstrapData }> {
+  return postAction<{ version: number; bootstrap: BootstrapData }>({ action: 'publish' }, 'Não foi possível publicar o placar. A versão anterior foi mantida.');
 }
 
 export function loadAdminData(signal?: AbortSignal): Promise<AdminData> {

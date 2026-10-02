@@ -3,7 +3,7 @@ function preview_() {
   if (!active) throw new Error('NO_ACTIVE_GAME: Não há uma gincana ativa.');
   var gameId = text_(active.ID);
   var current = rankingForGame_(gameId);
-  var published = publishedSnapshotForGame_(rows_('PLACAR_PUBLICADO'), gameId);
+  var published = publishedSnapshotForGame_(gameId);
   var previousById = (published ? published.ranking : []).reduce(function (result, row, index) {
     result[text_(row.id)] = { position: index + 1, registrations: row.registrations, name: row.name, team: row.team, initials: row.initials }; return result;
   }, {});
@@ -29,5 +29,21 @@ function preview_() {
     newLeader: current.length ? current[0].name : '',
     leaderChanged: Boolean(current.length && (!published || !published.ranking.length || current[0].id !== published.ranking[0].id)),
     changes: changes
+  };
+}
+
+function publishedSnapshotForGame_(gameId) {
+  var publishedRows = latestPublishedRows_(gameId);
+  if (!publishedRows.length) return null;
+  return {
+    version: number_(publishedRows[0].VERSAO),
+    total: publishedRows.reduce(function (sum, row) { return sum + number_(row.INSCRICOES); }, 0),
+    publishedAt: dateText_(publishedRows[0].PUBLICADO_EM),
+    ranking: publishedRows.map(function (row) {
+      return {
+        id: text_(row.PARTICIPANTE_ID), name: text_(row.NOME), team: text_(row.EQUIPE),
+        initials: initials_(row.NOME), registrations: number_(row.INSCRICOES)
+      };
+    })
   };
 }
