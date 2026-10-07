@@ -7,6 +7,8 @@ type BootstrapPayload = {
   participants: Array<{ id: string; name: string; avatarUrl?: string; registrations: number }>;
   history: Array<{ participantId: string; productId: string; quantity: number; status: string }>;
   products: Array<{ id: string; name: string }>;
+  employmentNotes?: Array<{ id: string; participantId: string; productId: string; quantity: number }>;
+  totalNotes?: number;
 };
 
 type AdminPayload = {

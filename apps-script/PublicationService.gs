@@ -1,7 +1,9 @@
 function publish_() {
+  ensureEmploymentNotesSheet_();
+  ensurePublishedNoteColumns_();
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
-  var names = ['PLACAR_PUBLICADO', 'PUBLICACOES', 'LANCAMENTOS', 'GINCANAS', 'AUDITORIA'];
+  var names = ['PLACAR_PUBLICADO', 'PUBLICACOES', 'LANCAMENTOS', 'NOTAS_EMPENHO', 'GINCANAS', 'AUDITORIA'];
   var backups = names.reduce(function (result, name) { result[name] = captureSheet_(name); return result; }, {});
   try {
     var active = rows_('GINCANAS').find(function (game) { return text_(game.STATUS).toUpperCase() === 'ATIVA'; });
@@ -9,9 +11,12 @@ function publish_() {
     var gameId = text_(active.ID);
     var launches = rows_('LANCAMENTOS');
     var pending = launches.filter(function (launch) { return text_(launch.GINCANA_ID) === gameId && text_(launch.STATUS).toUpperCase() === 'ATIVO' && !text_(launch.PUBLICADO_NA_VERSAO); });
-    if (!pending.length) throw new Error('NOTHING_TO_PUBLISH: Não existem alterações pendentes de publicação.');
+    var pendingNotes = rows_('NOTAS_EMPENHO').filter(function (note) { return text_(note.GINCANA_ID) === gameId && !text_(note.PUBLICADO_NA_VERSAO); });
+    if (!pending.length && !pendingNotes.length) throw new Error('NOTHING_TO_PUBLISH: Não existem alterações pendentes de publicação.');
     var ranking = rankingForGame_(gameId);
-    if (!ranking.length) throw new Error('EMPTY_PUBLICATION: Não foi possível gerar um ranking vazio.');
+    var noteTotals = employmentNoteTotals_(gameId);
+    ranking = ranking.map(function (person) { return Object.assign({}, person, { noteCount: noteTotals.byParticipant[person.id] || 0, totalNotes: noteTotals.total }); });
+    if (!ranking.length && !pendingNotes.length) throw new Error('EMPTY_PUBLICATION: Não foi possível gerar um ranking vazio.');
     var existing = rows_('PLACAR_PUBLICADO').filter(function (row) { return text_(row.GINCANA_ID) === gameId; });
     var currentVersion = existing.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, number_(active.VERSAO_PUBLICADA));
     var version = currentVersion + 1;
@@ -19,13 +24,14 @@ function publish_() {
     replacePublishedRows_(gameId, version, ranking, now);
     appendObject_('PUBLICACOES', {
       ID: Utilities.getUuid(), GINCANA_ID: gameId, VERSAO: version, PUBLICADO_POR: 'painel.supervisora', PUBLICADO_EM: now,
-      QUANTIDADE_LANCAMENTOS: pending.length, RESUMO_JSON: JSON.stringify({ total: ranking.reduce(function (sum, row) { return sum + row.registrations; }, 0), participantes: ranking.length }), OBSERVACAO: ''
+      QUANTIDADE_LANCAMENTOS: pending.length, RESUMO_JSON: JSON.stringify({ total: ranking.reduce(function (sum, row) { return sum + row.registrations; }, 0), participantes: ranking.length, totalNotas: noteTotals.total }), OBSERVACAO: ''
     });
     pending.forEach(function (launch) { updateObjectById_('LANCAMENTOS', text_(launch.ID), { PUBLICADO_NA_VERSAO: version }); });
+    pendingNotes.forEach(function (note) { updateObjectById_('NOTAS_EMPENHO', text_(note.ID), { PUBLICADO_NA_VERSAO: version }); });
     updateObjectById_('GINCANAS', gameId, { VERSAO_PUBLICADA: version, ATUALIZADO_EM: now });
     appendObject_('AUDITORIA', {
       ID: Utilities.getUuid(), ACAO: 'PUBLICAR', ENTIDADE: 'PLACAR', ENTIDADE_ID: gameId, ANTES_JSON: JSON.stringify({ versao: currentVersion }),
-      DEPOIS_JSON: JSON.stringify({ versao: version, lancamentos: pending.length }), USUARIO: 'painel.supervisora', DATA_HORA: now
+      DEPOIS_JSON: JSON.stringify({ versao: version, lancamentos: pending.length, notasEmpenho: pendingNotes.length }), USUARIO: 'painel.supervisora', DATA_HORA: now
     });
     return { version: version, bootstrap: bootstrap_() };
   } catch (error) {
@@ -42,12 +48,23 @@ function replacePublishedRows_(gameId, version, ranking, publishedAt) {
   var headers = values.shift().map(function (header) { return String(header).trim(); });
   var kept = values.filter(function (row) { return text_(row[headers.indexOf('GINCANA_ID')]) !== text_(gameId); });
   var rows = ranking.map(function (person, index) {
-    var object = { GINCANA_ID: gameId, VERSAO: version, TIPO_RANKING: 'GERAL', EQUIPE_ID: '', POSICAO: index + 1, PARTICIPANTE_ID: person.id, NOME: person.name, EQUIPE: person.team, AVATAR_URL: '', INSCRICOES: person.registrations, PUBLICADO_EM: publishedAt };
+    var object = { GINCANA_ID: gameId, VERSAO: version, TIPO_RANKING: 'GERAL', EQUIPE_ID: '', POSICAO: index + 1, PARTICIPANTE_ID: person.id, NOME: person.name, EQUIPE: person.team, AVATAR_URL: '', INSCRICOES: person.registrations, NOTAS_EMPENHO: person.noteCount || 0, TOTAL_NOTAS_EMPENHO: person.totalNotes || 0, PUBLICADO_EM: publishedAt };
     return headers.map(function (header) { return object[header] === undefined ? '' : object[header]; });
   });
   var output = [headers].concat(kept).concat(rows);
   sheet.getRange(1, 1, sheet.getMaxRows(), Math.max(sheet.getMaxColumns(), headers.length)).clearContent();
   sheet.getRange(1, 1, output.length, headers.length).setValues(output);
+}
+
+function ensurePublishedNoteColumns_() {
+  var sheet = sheet_('PLACAR_PUBLICADO');
+  var width = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, width).getValues()[0].map(function (value) { return text_(value); });
+  ['NOTAS_EMPENHO', 'TOTAL_NOTAS_EMPENHO'].forEach(function (header) {
+    if (headers.indexOf(header) >= 0) return;
+    sheet.getRange(1, sheet.getLastColumn() + 1).setValue(header);
+    headers.push(header);
+  });
 }
 
 function updateObjectById_(name, id, changes) {

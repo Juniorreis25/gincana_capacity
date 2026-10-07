@@ -1,4 +1,5 @@
 function bootstrap_() {
+  ensureEmploymentNotesSheet_();
   var activeCampaign = typeof currentCampaign_ === 'function' ? currentCampaign_() : null;
   var activeCampaignId = activeCampaign ? text_(activeCampaign.ID) : '';
   var participantRows = rows_('PARTICIPANTES');
@@ -43,6 +44,12 @@ function bootstrap_() {
     return b.registrations - a.registrations || a.name.localeCompare(b.name);
   });
 
+  var noteTotals = activeCampaignId ? employmentNoteTotals_(activeCampaignId) : { byParticipant: {}, total: 0 };
+  ranking = ranking.map(function (participant) {
+    return Object.assign({}, participant, { noteCount: noteTotals.byParticipant[participant.id] || 0 });
+  });
+  var employmentNotes = activeCampaignId ? employmentNotesForCampaign_(activeCampaignId) : [];
+
   var history = scopedLaunches.map(function (launch) {
     var participant = participantById[text_(launch.PARTICIPANTE_ID)] || {};
     var product = productById[text_(launch.PRODUTO_ID)] || {};
@@ -71,7 +78,9 @@ function bootstrap_() {
     products: productRows.filter(function (product) { return isActive_(product.ATIVO) && (campaignProductIds === null || campaignProductIds[text_(product.ID)]); }).map(function (product) {
       return { id: text_(product.ID), name: text_(product.NOME) };
     }),
-    history: history
+    history: history,
+    employmentNotes: employmentNotes,
+    totalNotes: noteTotals.total
   };
 }
 

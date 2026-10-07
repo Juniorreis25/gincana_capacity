@@ -92,6 +92,11 @@ button { font: inherit; }
 .brand-logo-wrap,.score-logo-wrap { background:transparent;border-radius:0;padding:0;box-shadow:none; }
 .brand-logo-wrap img,.score-logo-wrap img { object-fit:contain;filter:drop-shadow(0 3px 8px rgba(0,0,0,.18)); }
 @media (prefers-reduced-motion: reduce) { .scoreboard-pulse .podium-place-1,.score-rank-row.movement-up,.score-rank-row.movement-down,.leader-alert { animation:none; } }
+.score-rankings-head,.score-rank-row { grid-template-columns:55px minmax(145px,1fr) 95px 78px minmax(155px,auto); }
+.rank-notes { color:#d5dfeb;font-size:16px;text-align:center; }
+.enrollments-sections { display:grid;gap:20px; }
+.list-page-subtitle { margin:5px 0 0;color:#7b899c;font-size:12px; }
+@media (max-width: 700px) { .score-rankings-head,.score-rank-row { grid-template-columns:35px minmax(0,1fr) auto; }.rank-notes { grid-column:3;grid-row:1;font-size:14px; }.score-rank-row .rank-movement { grid-column:2/-1; }.scoreboard-stats > div:nth-child(3) { display:none; } }
 .podium-tie { display:inline-flex;margin-top:6px;color:#dce8f3;font-size:10px;font-weight:700; }
 .podium-deck { align-items:center; }
 .score-rankings-head > span:nth-child(1) { text-align:left; }

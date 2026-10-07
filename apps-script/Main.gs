@@ -21,6 +21,8 @@ function doPost(e) {
     if (action === 'createLaunch') return json_(ok_(createLaunch_(body)));
     if (action === 'updateLaunch') return json_(ok_(updateLaunch_(body)));
     if (action === 'deleteLaunch') return json_(ok_(deleteLaunch_(body)));
+    if (action === 'createEmploymentNote') return json_(ok_(createEmploymentNote_(body)));
+    if (action === 'updateEmploymentNote') return json_(ok_(updateEmploymentNote_(body)));
     if (action === 'adminData') return json_(ok_(adminData_()));
     if (action === 'createParticipant' || action === 'updateParticipant' || action === 'deleteParticipant' || action === 'deactivateParticipant' || action === 'activateParticipant') return json_(ok_(adminMutate_('participant', action, body)));
     if (action === 'createProduct' || action === 'updateProduct' || action === 'deleteProduct' || action === 'deactivateProduct' || action === 'activateProduct') return json_(ok_(adminMutate_('product', action, body)));

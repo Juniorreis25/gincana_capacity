@@ -5,6 +5,19 @@ export type RankingRow = {
   name: string;
   avatarUrl?: string;
   registrations: number;
+  noteCount?: number;
+};
+
+export type EmploymentNoteRow = {
+  id: string;
+  participantId: string;
+  participant: string;
+  productId: string;
+  product: string;
+  date: string;
+  quantity: number;
+  publishedVersion?: string;
+  pendingPublication?: boolean;
 };
 
 export type EnrollmentRow = {
@@ -64,6 +77,8 @@ export type BootstrapData = {
   participants: RankingRow[];
   products: Array<{ id: string; name: string }>;
   history: EnrollmentRow[];
+  employmentNotes?: EmploymentNoteRow[];
+  totalNotes?: number;
 };
 
 export type ScoreboardData = {
@@ -72,6 +87,7 @@ export type ScoreboardData = {
   version: number;
   publishedAt?: string;
   published: boolean;
+  totalNotes?: number;
 };
 
 export type ArchivedCampaign = {
@@ -158,6 +174,14 @@ export function startNewCampaign(input: { name: string; month: string; year: num
 
 export function createLaunch(input: { participantId: string; productId: string; quantity: number; date: string; notes?: string }): Promise<BootstrapData> {
   return postAction<BootstrapData>({ action: 'createLaunch', ...input }, 'Não foi possível registrar a inscrição.');
+}
+
+export function createEmploymentNote(input: { participantId: string; productId: string; quantity: number; date: string }): Promise<BootstrapData> {
+  return postAction<BootstrapData>({ action: 'createEmploymentNote', ...input }, 'Não foi possível registrar a nota de empenho.');
+}
+
+export function updateEmploymentNote(input: { id: string; participantId: string; productId: string; quantity: number; date: string }): Promise<BootstrapData> {
+  return postAction<BootstrapData>({ action: 'updateEmploymentNote', ...input }, 'Não foi possível editar a nota de empenho.');
 }
 
 export function updateLaunch(input: { id: string; participantId: string; productId: string; quantity: number; date: string; notes?: string }): Promise<BootstrapData> {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, CalendarDays, CheckCircle2, Crown, Eye, LayoutDashboard, ListChecks, Medal, Minus, Package, Pencil, Plus, RefreshCw, Trash2, Trophy, UserCheck, Users } from 'lucide-react';
+import { Archive, ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, CalendarDays, CheckCircle2, Crown, Eye, FileText, LayoutDashboard, ListChecks, Medal, Minus, Package, Pencil, Plus, RefreshCw, Trash2, Trophy, UserCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import {
   adminMutation,
   createLaunch,
+  createEmploymentNote,
   deleteLaunch,
   getCampaign,
   getCampaignAssociations,
@@ -21,6 +22,7 @@ import {
   startNewCampaign,
   updateCampaignAssociations,
   updateLaunch,
+  updateEmploymentNote,
   type AdminData,
   type ArchivedCampaign,
   type BootstrapData,
@@ -28,14 +30,15 @@ import {
   type CampaignAssociations,
   type ConnectionMode,
   type EnrollmentRow,
+  type EmploymentNoteRow,
   type PreviewData,
   type RankingRow,
   type ScoreboardData,
 } from '@/lib/integration';
 
 type PageName = 'dashboard' | 'participants' | 'products' | 'enrollments' | 'archive';
-const emptyBootstrap: BootstrapData = { participants: [], products: [], history: [] };
-const emptyScoreboard: ScoreboardData = { ranking: [], version: 0, published: false };
+const emptyBootstrap: BootstrapData = { participants: [], products: [], history: [], employmentNotes: [], totalNotes: 0 };
+const emptyScoreboard: ScoreboardData = { ranking: [], version: 0, published: false, totalNotes: 0 };
 const emptyAdmin: AdminData = { participants: [], products: [] };
 const pageTitles: Record<PageName, string> = { dashboard: 'Visão geral', participants: 'Participantes', products: 'Produtos', enrollments: 'Inscrições', archive: 'Arquivo' };
 
@@ -50,6 +53,8 @@ export default function Home() {
   const [messageIsError, setMessageIsError] = useState(false);
   const [enrollmentOpen, setEnrollmentOpen] = useState(false);
   const [editingEnrollment, setEditingEnrollment] = useState<EnrollmentRow | null>(null);
+  const [employmentNoteOpen, setEmploymentNoteOpen] = useState(false);
+  const [editingEmploymentNote, setEditingEmploymentNote] = useState<EmploymentNoteRow | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [campaigns, setCampaigns] = useState<ArchivedCampaign[]>([]);
   const [localPreviewCampaign, setLocalPreviewCampaign] = useState<CampaignSummary | null>(null);
@@ -95,7 +100,7 @@ export default function Home() {
       }
       try {
         const live = await loadBootstrap();
-        const compatibility = { campaign: live.campaign, ranking: live.participants, version: 0, publishedAt: '', published: Boolean(live.participants.length) };
+        const compatibility = { campaign: live.campaign, ranking: live.participants, version: 0, publishedAt: '', published: Boolean(live.participants.length), totalNotes: live.totalNotes || 0 };
         setScoreboardData(compatibility);
         setScoreboardCompatibility(true);
         setMode('live');
@@ -149,6 +154,7 @@ export default function Home() {
   };
 
   const openNewEnrollment = () => { setEditingEnrollment(null); setEnrollmentOpen(true); };
+  const openNewEmploymentNote = () => { setEditingEmploymentNote(null); setEmploymentNoteOpen(true); };
   const openNewCampaign = () => setNewCampaignOpen(true);
   const openAssociations = () => {
     setAssociationsOpen(true);
@@ -188,7 +194,7 @@ export default function Home() {
       setPublishing(false);
     }
   };
-  const displayBootstrap = localPreviewCampaign ? { ...bootstrap, participants: [], products: [], history: [] } : bootstrap;
+  const displayBootstrap = localPreviewCampaign ? { ...bootstrap, participants: [], products: [], history: [], employmentNotes: [], totalNotes: 0 } : bootstrap;
   const displayAdminData = localPreviewCampaign ? { ...adminData, products: [] } : adminData;
   const activeCampaign = localPreviewCampaign || bootstrap.campaign || null;
   const totalRegistrations = displayBootstrap.participants.reduce((sum, item) => sum + item.registrations, 0);
@@ -218,16 +224,17 @@ export default function Home() {
         <div className="content-wrap">
           {message && <p className={messageIsError ? 'success-banner error' : 'success-banner'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
           {mode === 'error' && <ConnectionError onRetry={() => { void refreshAll().catch(() => undefined); }} />}
-          {page === 'dashboard' && <Dashboard participants={displayAdminData.participants.filter((item) => item.active).length} products={displayAdminData.products.filter((item) => item.active).length} total={totalRegistrations} leader={displayBootstrap.participants[0]} history={displayBootstrap.history} campaign={activeCampaign} campaignApiReady={bootstrap.campaign !== undefined || Boolean(localPreviewCampaign)} previewMode={Boolean(localPreviewCampaign)} onConfigureAssociations={openAssociations} onPreview={openPreview} previewLoading={previewLoading} />}
+          {page === 'dashboard' && <Dashboard participants={displayAdminData.participants.filter((item) => item.active).length} products={displayAdminData.products.filter((item) => item.active).length} total={totalRegistrations} leader={displayBootstrap.participants[0]} history={displayBootstrap.history} employmentNotes={displayBootstrap.employmentNotes || []} campaign={activeCampaign} campaignApiReady={bootstrap.campaign !== undefined || Boolean(localPreviewCampaign)} previewMode={Boolean(localPreviewCampaign)} onConfigureAssociations={openAssociations} onPreview={openPreview} previewLoading={previewLoading} />}
           {page === 'participants' && <ParticipantsView data={displayAdminData} previewMode={Boolean(localPreviewCampaign)} onMutate={mutate} />}
           {page === 'products' && <ProductsView data={displayAdminData} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} previewMode={Boolean(localPreviewCampaign)} onMutate={mutate} />}
-          {page === 'enrollments' && <EnrollmentsView history={displayBootstrap.history} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} onNew={openNewEnrollment} onEdit={(row) => { setEditingEnrollment(row); setEnrollmentOpen(true); }} onDeleted={async (id) => { setBootstrap(await deleteLaunch(id)); setMessageIsError(false); setMessage('Inscrição excluída. O placar foi atualizado.'); }} />}
+          {page === 'enrollments' && <EnrollmentsView history={displayBootstrap.history} employmentNotes={displayBootstrap.employmentNotes || []} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} onNew={openNewEnrollment} onNewNote={openNewEmploymentNote} onEdit={(row) => { setEditingEnrollment(row); setEnrollmentOpen(true); }} onEditNote={(row) => { setEditingEmploymentNote(row); setEmploymentNoteOpen(true); }} onDeleted={async (id) => { setBootstrap(await deleteLaunch(id)); setMessageIsError(false); setMessage('Inscrição excluída. O placar foi atualizado.'); }} />}
           {page === 'archive' && <ArchiveView campaigns={campaigns} currentCampaignId={bootstrap.campaign?.id} apiReady={bootstrap.campaign !== undefined} previewMode={Boolean(localPreviewCampaign)} onLoadCampaign={getCampaign} />}
         </div>
       </section>
     </main>
     <EnrollmentDialog open={enrollmentOpen} onOpenChange={setEnrollmentOpen} editing={editingEnrollment} participants={displayAdminData.participants.filter((item) => item.active)} products={displayAdminData.products.filter((item) => item.active)} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} onSaved={async (input) => { const live = editingEnrollment ? await updateLaunch({ id: editingEnrollment.id, ...input }) : await createLaunch(input); setBootstrap(live); setAdminData(await loadAdminData()); setEnrollmentOpen(false); setEditingEnrollment(null); setMessageIsError(false); setMessage(editingEnrollment ? 'Inscrição atualizada e pendente de publicação.' : 'Inscrição registrada e pendente de publicação.'); }} />
-    <PublicationDialog open={previewOpen} onOpenChange={setPreviewOpen} pending={displayBootstrap.history.filter((row) => row.pendingPublication).length} total={totalRegistrations} preview={previewData} publishing={publishing} onPublish={publish} />
+    <EmploymentNoteDialog open={employmentNoteOpen} onOpenChange={setEmploymentNoteOpen} editing={editingEmploymentNote} participants={displayAdminData.participants.filter((item) => item.active)} products={displayAdminData.products.filter((item) => item.active)} campaignActive={Boolean(localPreviewCampaign || bootstrap.campaign)} onSaved={async (input) => { const live = editingEmploymentNote ? await updateEmploymentNote({ id: editingEmploymentNote.id, ...input }) : await createEmploymentNote(input); setBootstrap(live); setEmploymentNoteOpen(false); setEditingEmploymentNote(null); setMessageIsError(false); setMessage(editingEmploymentNote ? 'Nota de empenho atualizada e pendente de publicação.' : 'Nota de empenho registrada e pendente de publicação.'); }} />
+    <PublicationDialog open={previewOpen} onOpenChange={setPreviewOpen} pending={displayBootstrap.history.filter((row) => row.pendingPublication).length + (displayBootstrap.employmentNotes || []).filter((row) => row.pendingPublication).length} total={totalRegistrations} preview={previewData} publishing={publishing} onPublish={publish} />
     <NewCampaignDialog open={newCampaignOpen} onOpenChange={setNewCampaignOpen} onSave={async (input) => {
       if (bootstrap.campaign !== undefined) {
         const result = await startNewCampaign(input);
@@ -275,13 +282,14 @@ function LoadingScreen() { return <main className="loading-screen" aria-live="po
 
 function ConnectionError({ onRetry }: { onRetry: () => void }) { return <section className="connection-error"><div><strong>Não foi possível acessar a planilha.</strong><span>Os últimos dados válidos foram mantidos. Tente novamente.</span></div><Button variant="outline" onClick={onRetry}><RefreshCw size={16}/> Tentar novamente</Button></section>; }
 
-function Dashboard({ participants, products, total, leader, history, campaign, campaignApiReady, previewMode, onConfigureAssociations, onPreview, previewLoading }: { participants: number; products: number; total: number; leader?: RankingRow; history: EnrollmentRow[]; campaign: CampaignSummary | null; campaignApiReady: boolean; previewMode: boolean; onConfigureAssociations: () => void; onPreview: () => Promise<void>; previewLoading: boolean }) {
+function Dashboard({ participants, products, total, leader, history, employmentNotes, campaign, campaignApiReady, previewMode, onConfigureAssociations, onPreview, previewLoading }: { participants: number; products: number; total: number; leader?: RankingRow; history: EnrollmentRow[]; employmentNotes: EmploymentNoteRow[]; campaign: CampaignSummary | null; campaignApiReady: boolean; previewMode: boolean; onConfigureAssociations: () => void; onPreview: () => Promise<void>; previewLoading: boolean }) {
   const pending = history.filter((row) => row.pendingPublication);
+  const pendingNotes = employmentNotes.filter((row) => row.pendingPublication);
   const pendingTotal = pending.reduce((sum, row) => sum + row.quantity, 0);
   const pendingParticipants = new Set(pending.map((row) => row.participantId)).size;
   return <div className="simple-dashboard">
     {campaignApiReady && <section className={campaign ? 'campaign-context-card' : 'campaign-context-card empty'}><div><p className="eyebrow">Campanha atual</p><h2>{campaign?.name || 'Nenhuma campanha ativa'}</h2>{campaign && <span>{formatDate(campaign.startDate || '')} a {formatDate(campaign.endDate || '')}</span>}</div><div className="campaign-context-actions"><strong>{campaign ? 'ATIVA' : 'Aguardando criação'}</strong>{campaign && <Button variant="outline" disabled={previewMode} onClick={onConfigureAssociations}>Configurar associações</Button>}</div></section>}
-    {!previewMode && pending.length > 0 && <section className="status-banner"><div className="status-icon"><ArrowUpRight size={20}/></div><div className="status-copy"><strong>{pending.length} alterações aguardam publicação</strong><span>{pendingTotal} inscrições líquidas · {pendingParticipants} participantes afetadas · a TV continua mostrando a última versão publicada.</span></div><Button className="publish-button" disabled={previewLoading} onClick={() => { void onPreview(); }}>{previewLoading ? 'Gerando prévia…' : 'Revisar e publicar'} <ArrowUpRight size={16}/></Button></section>}
+    {!previewMode && (pending.length + pendingNotes.length) > 0 && <section className="status-banner"><div className="status-icon"><ArrowUpRight size={20}/></div><div className="status-copy"><strong>{pending.length + pendingNotes.length} alterações aguardam publicação</strong><span>{pendingTotal} inscrições líquidas · {pendingNotes.length} notas de empenho · {pendingParticipants} participantes afetadas · a TV continua mostrando a última versão publicada.</span></div><Button className="publish-button" disabled={previewLoading} onClick={() => { void onPreview(); }}>{previewLoading ? 'Gerando prévia…' : 'Revisar e publicar'} <ArrowUpRight size={16}/></Button></section>}
     <section className="metrics-grid simple-metrics">
       <Metric label="Participantes ativos" value={String(participants)} icon={<UserCheck/>}/><Metric label="Produtos ativos" value={String(products)} icon={<Package/>}/><Metric label="Total de inscrições" value={String(total)} icon={<ListChecks/>}/><Metric label="Líder atual" value={leader?.name || 'Ainda não definido'} detail={leader ? `${leader.registrations} inscrições` : 'Aguardando registros'} icon={<Medal/>} featured/>
     </section>
@@ -335,9 +343,9 @@ function ProductsView({ data, campaignActive, previewMode, onMutate }: { data: A
   return <section className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Cadastros</p><h2>Produtos</h2></div><Button className="primary-action" disabled={previewMode} onClick={() => { setEditing(null); setOpen(true); }}><Plus size={16}/> Novo produto</Button></div>{previewMode && <p className="preview-lock-note">Prévia local: alterações de cadastro ficam bloqueadas até a integração da nova campanha.</p>}{data.products.length ? <div className="products-table" role="table" aria-label="Produtos cadastrados"><div className="products-row products-row-head" role="row"><span>Produto</span><span>Categoria</span><span>Status</span><span>Registros</span><span>Ações</span></div>{data.products.map((item) => <article className="products-row" role="row" key={item.id}><div className="product-identity"><strong title={item.name}>{item.name}</strong></div><span className="product-category">{item.category || 'Sem categoria'}</span><span className={item.active ? 'product-status active' : 'product-status inactive'}>{item.active ? 'Ativo' : 'Inativo'}</span><strong className="product-records">{item.historyCount} <small>{item.historyCount === 1 ? 'registro' : 'registros'}</small></strong><div className="admin-row-actions"><Button variant="outline" disabled={previewMode} onClick={() => { setEditing(item); setOpen(true); }}><Pencil/> Editar</Button><Button variant="outline" disabled={previewMode} onClick={() => void onMutate(item.active ? 'deactivateProduct' : 'activateProduct', { id: item.id }, item.active ? 'Produto desativado.' : 'Produto reativado.')}>{item.active ? 'Desativar' : 'Reativar'}</Button><Button variant="destructive" disabled={previewMode} onClick={() => setConfirm(item)}><Trash2/> Excluir</Button></div></article>)}</div> : <EmptyState text={campaignActive ? 'Nenhum produto associado à campanha atual. Cadastre um produto para começar.' : 'Nenhum produto cadastrado.'}/>}<ProductDialog open={open} onOpenChange={setOpen} editing={editing} onSave={async (input) => { await onMutate(editing ? 'updateProduct' : 'createProduct', editing ? { id: editing.id, ...input } : input, editing ? 'Produto atualizado.' : 'Produto cadastrado.'); setOpen(false); }}/><ConfirmDialog open={Boolean(confirm)} title={confirm?.historyCount ? 'Desativar produto?' : 'Excluir produto?'} description={confirm?.historyCount ? 'Este produto possui histórico. Ele será desativado e deixará de aparecer em novas inscrições.' : 'Este produto será removido definitivamente.'} confirmLabel={confirm?.historyCount ? 'Desativar' : 'Excluir'} onOpenChange={(value) => !value && setConfirm(null)} onConfirm={async () => { if (!confirm) return; await onMutate(confirm.historyCount ? 'deactivateProduct' : 'deleteProduct', { id: confirm.id }, confirm.historyCount ? 'Produto desativado.' : 'Produto excluído.'); setConfirm(null); }}/></section>;
 }
 
-function EnrollmentsView({ history, campaignActive, onNew, onEdit, onDeleted }: { history: EnrollmentRow[]; campaignActive: boolean; onNew: () => void; onEdit: (row: EnrollmentRow) => void; onDeleted: (id: string) => Promise<void> }) {
+function EnrollmentsView({ history, employmentNotes, campaignActive, onNew, onNewNote, onEdit, onEditNote, onDeleted }: { history: EnrollmentRow[]; employmentNotes: EmploymentNoteRow[]; campaignActive: boolean; onNew: () => void; onNewNote: () => void; onEdit: (row: EnrollmentRow) => void; onEditNote: (row: EmploymentNoteRow) => void; onDeleted: (id: string) => Promise<void> }) {
   const [confirm, setConfirm] = useState<EnrollmentRow | null>(null);
-  return <section className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Movimentações</p><h2>Inscrições</h2></div><Button className="primary-action" onClick={onNew}><Plus size={16}/> Nova inscrição</Button></div>{history.length ? <div className="enrollment-table"><div className="enrollment-row head"><span>Data</span><span>Participante</span><span>Produto</span><span>Quantidade</span><span>Situação</span><span>Ações</span></div>{history.map((row) => { const status = enrollmentStatus(row); return <div className="enrollment-row" key={row.id}><span>{formatDate(row.date)}</span><strong>{row.participant || 'Cadastro indisponível'}</strong><span>{row.product || 'Cadastro indisponível'}</span><b>{row.quantity}</b><em className={status.className}>{status.label}</em><div>{row.status === 'ATIVO' && <><Button variant="outline" onClick={() => onEdit(row)}><Pencil/> Editar</Button><Button variant="destructive" onClick={() => setConfirm(row)}><Trash2/> Excluir</Button></>}</div></div>; })}</div> : <EmptyState text={campaignActive ? 'Nenhuma inscrição registrada nesta campanha.' : 'Nenhuma inscrição registrada.'}/>}<ConfirmDialog open={Boolean(confirm)} title="Excluir inscrição?" description="A inscrição deixará de contar no placar, mas permanecerá registrada para auditoria." confirmLabel="Excluir inscrição" onOpenChange={(value) => !value && setConfirm(null)} onConfirm={async () => { if (!confirm) return; await onDeleted(confirm.id); setConfirm(null); }}/></section>;
+  return <div className="enrollments-sections"><section className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Movimentações</p><h2>Inscrições</h2></div><Button className="primary-action" onClick={onNew}><Plus size={16}/> Nova inscrição</Button></div>{history.length ? <div className="enrollment-table"><div className="enrollment-row head"><span>Data</span><span>Participante</span><span>Produto</span><span>Quantidade</span><span>Situação</span><span>Ações</span></div>{history.map((row) => { const status = enrollmentStatus(row); return <div className="enrollment-row" key={row.id}><span>{formatDate(row.date)}</span><strong>{row.participant || 'Cadastro indisponível'}</strong><span>{row.product || 'Cadastro indisponível'}</span><b>{row.quantity}</b><em className={status.className}>{status.label}</em><div>{row.status === 'ATIVO' && <><Button variant="outline" onClick={() => onEdit(row)}><Pencil/> Editar</Button><Button variant="destructive" onClick={() => setConfirm(row)}><Trash2/> Excluir</Button></>}</div></div>; })}</div> : <EmptyState text={campaignActive ? 'Nenhuma inscrição registrada nesta campanha.' : 'Nenhuma inscrição registrada.'}/>}<ConfirmDialog open={Boolean(confirm)} title="Excluir inscrição?" description="A inscrição deixará de contar no placar, mas permanecerá registrada para auditoria." confirmLabel="Excluir inscrição" onOpenChange={(value) => !value && setConfirm(null)} onConfirm={async () => { if (!confirm) return; await onDeleted(confirm.id); setConfirm(null); }}/></section><section className="panel-card list-page"><div className="list-page-head"><div><p className="eyebrow">Operação financeira</p><h2>Notas de empenho</h2><p className="list-page-subtitle">Quantidade registrada por participante e produto. O total só chega à TV após a publicação.</p></div><Button variant="outline" onClick={onNewNote}><FileText size={16}/> Registrar nota</Button></div>{employmentNotes.length ? <div className="enrollment-table employment-note-table"><div className="enrollment-row head"><span>Data</span><span>Participante</span><span>Produto</span><span>Quantidade</span><span>Situação</span><span>Ações</span></div>{employmentNotes.map((row) => <div className="enrollment-row" key={row.id}><span>{formatDate(row.date)}</span><strong>{row.participant || 'Cadastro indisponível'}</strong><span>{row.product || 'Cadastro indisponível'}</span><b>{row.quantity}</b><em className={row.pendingPublication ? '' : 'active'}>{row.pendingPublication ? 'Pendente' : 'Publicada'}</em><div><Button variant="outline" onClick={() => onEditNote(row)}><Pencil/> Editar</Button></div></div>)}</div> : <EmptyState text={campaignActive ? 'Nenhuma nota de empenho registrada nesta campanha.' : 'Nenhuma nota de empenho registrada.'}/>}</section></div>;
 }
 
 function ParticipantDialog({ open, onOpenChange, editing, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; editing: AdminData['participants'][number] | null; onSave: (input: { name: string; avatarUrl: string }) => Promise<void> }) {
@@ -357,6 +365,13 @@ function EnrollmentDialog({ open, onOpenChange, editing, participants, products,
   useEffect(() => { if (!open) return; setParticipantId(editing?.participantId || participants[0]?.id || ''); setProductId(editing?.productId || products[0]?.id || ''); setQuantity(editing?.quantity || 1); setDate(editing?.date?.slice(0,10) || today()); setNotes(editing?.notes || ''); setError(''); }, [open, editing, participants, products]);
   const canSave = participantId && productId && Number.isInteger(quantity) && quantity > 0 && date;
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="entity-dialog enrollment-dialog"><DialogHeader><DialogTitle>{editing ? 'Editar inscrição' : 'Registrar inscrição'}</DialogTitle><DialogDescription>A inscrição ficará pendente até a gestão confirmar a publicação do placar.</DialogDescription></DialogHeader>{participants.length && products.length ? <div className="form-grid"><Field label="Participante" id="enrollment-participant"><select id="enrollment-participant" value={participantId} onChange={(e) => setParticipantId(e.target.value)}>{participants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Produto" id="enrollment-product"><select id="enrollment-product" value={productId} onChange={(e) => setProductId(e.target.value)}>{products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Quantidade" id="enrollment-quantity"><Input id="enrollment-quantity" type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}/></Field><Field label="Data" id="enrollment-date"><Input id="enrollment-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}/></Field><div className="field full"><Label htmlFor="enrollment-notes">Observação (opcional)</Label><Input id="enrollment-notes" value={notes} onChange={(e) => setNotes(e.target.value)}/></div></div> : <EmptyState text={campaignActive ? 'Cadastre um produto associado à campanha atual antes de registrar uma inscrição.' : 'Cadastre ao menos uma participante e um produto ativos antes de registrar uma inscrição.'}/>} {error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" disabled={saving || !canSave} onClick={() => { setSaving(true); setError(''); void onSaved({ participantId, productId, quantity, date, notes: notes.trim() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.')).finally(() => setSaving(false)); }}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Registrar inscrição'}</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+function EmploymentNoteDialog({ open, onOpenChange, editing, participants, products, campaignActive, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; editing: EmploymentNoteRow | null; participants: AdminData['participants']; products: AdminData['products']; campaignActive: boolean; onSaved: (input: { participantId: string; productId: string; quantity: number; date: string }) => Promise<void> }) {
+  const [participantId, setParticipantId] = useState(''); const [productId, setProductId] = useState(''); const [quantity, setQuantity] = useState(0); const [date, setDate] = useState(today()); const [saving, setSaving] = useState(false); const [error, setError] = useState('');
+  useEffect(() => { if (!open) return; setParticipantId(editing?.participantId || participants[0]?.id || ''); setProductId(editing?.productId || products[0]?.id || ''); setQuantity(editing?.quantity ?? 0); setDate(editing?.date?.slice(0, 10) || today()); setError(''); }, [open, editing, participants, products]);
+  const canSave = participantId && productId && Number.isInteger(quantity) && quantity >= 0 && date;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="entity-dialog enrollment-dialog"><DialogHeader><DialogTitle>{editing ? 'Editar nota de empenho' : 'Registrar nota de empenho'}</DialogTitle><DialogDescription>Registre somente a quantidade de notas vinculada ao participante e ao produto.</DialogDescription></DialogHeader>{participants.length && products.length ? <div className="form-grid"><Field label="Participante" id="employment-note-participant"><select id="employment-note-participant" value={participantId} onChange={(e) => setParticipantId(e.target.value)}>{participants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Produto" id="employment-note-product"><select id="employment-note-product" value={productId} onChange={(e) => setProductId(e.target.value)}>{products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Quantidade" id="employment-note-quantity"><Input id="employment-note-quantity" type="number" min={0} step={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}/></Field><Field label="Data" id="employment-note-date"><Input id="employment-note-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}/></Field></div> : <EmptyState text={campaignActive ? 'Associe participantes e produtos à campanha antes de registrar uma nota.' : 'Cadastre ao menos uma participante e um produto ativos antes de registrar uma nota.'}/>} {error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button className="primary-action" disabled={saving || !canSave} onClick={() => { setSaving(true); setError(''); void onSaved({ participantId, productId, quantity, date }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Não foi possível salvar.')).finally(() => setSaving(false)); }}>{saving ? 'Salvando…' : editing ? 'Salvar alterações' : 'Registrar nota'}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function NewCampaignDialog({ open, onOpenChange, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; onSave: (input: { name: string; month: string; year: number; archiveCurrent: boolean }) => Promise<void> }) {
@@ -445,6 +460,7 @@ function Scoreboard({ data, compatibility, mode, onReload }: { data: ScoreboardD
   }, [ranking]);
 
   const total = ranking.reduce((sum, person) => sum + person.registrations, 0);
+  const totalNotes = data.totalNotes ?? ranking.reduce((sum, person) => sum + (person.noteCount || 0), 0);
   const podium = [ranking[1], ranking[0], ranking[2]].filter(Boolean);
   const rest = ranking.slice(3, 13);
   const motivation = scoreboardMotivation(ranking, movements, newLeader);
@@ -454,7 +470,7 @@ function Scoreboard({ data, compatibility, mode, onReload }: { data: ScoreboardD
   return <main className="scoreboard-shell min-h-screen text-white">
     <header className="scoreboard-header">
       <div className="scoreboard-title"><div className="score-logo-wrap"><img src="/capacity-logo.png" alt="Capacity"/></div><div><span className="score-brand">Campanha Comercial Capacity</span><h1>Ranking ao vivo</h1></div></div>
-      <div className="scoreboard-stats"><div><strong>{total}</strong><span>Total de inscrições</span></div><div><strong>{ranking.length}</strong><span>Participantes</span></div><div><strong>{updatedLabel}</strong><span>Última atualização</span></div></div>
+      <div className="scoreboard-stats"><div><strong>{total}</strong><span>Total de inscrições</span></div><div><strong>{ranking.length}</strong><span>Participantes</span></div><div><strong>{totalNotes}</strong><span>Notas de empenho</span></div><div><strong>{updatedLabel}</strong><span>Última atualização</span></div></div>
       <div className="scoreboard-controls"><span className={`score-connection ${mode}`}><i/> {connectionLabel}</span><button className="score-reload" onClick={() => void onReload()} aria-label="Recarregar placar"><RefreshCw size={14}/> Atualizar</button></div>
     </header>
     {mode === 'loading' && !ranking.length ? <section className="scoreboard-empty-screen"><div className="score-empty"><RefreshCw size={38}/><h2>Carregando ranking…</h2><p>Buscando os resultados mais recentes.</p></div></section> : !data.published && !compatibility ? <section className="scoreboard-empty-screen"><div className="score-empty"><Trophy size={48}/><h2>Placar ainda não publicado</h2><p>A gestão ainda não publicou resultados para esta campanha.</p></div></section> : ranking.length ? <section className={`scoreboard-main ${pulse ? 'scoreboard-pulse' : ''}`}>
@@ -464,7 +480,7 @@ function Scoreboard({ data, compatibility, mode, onReload }: { data: ScoreboardD
         <section className="podium-deck" aria-label="Pódio">
           {podium.map((person) => { const position = ranking.findIndex((item) => item.id === person.id) + 1; const movement = movements[person.id]; const tied = ranking.some((item) => item.id !== person.id && item.registrations === person.registrations); return <PodiumCard key={person.id} person={person} position={position} movement={movement} tied={tied}/>; })}
         </section>
-        {rest.length > 0 && <section className="score-rankings" aria-label="Demais participantes"><div className="score-rankings-head"><span>Posição</span><span>Participante</span><span>Inscrições</span><span>Movimento</span></div>{rest.map((person, index) => { const position = index + 4; const above = ranking[position - 2]; const movement = movements[person.id]; const gap = above ? Math.max(above.registrations - person.registrations, 0) : 0; return <RankingLine key={person.id} person={person} position={position} movement={movement} gap={gap} tied={Boolean(above && above.registrations === person.registrations)}/>; })}</section>}
+        {rest.length > 0 && <section className="score-rankings" aria-label="Demais participantes"><div className="score-rankings-head"><span>Posição</span><span>Participante</span><span>Inscrições</span><span>N. Empenho</span><span>Movimento</span></div>{rest.map((person, index) => { const position = index + 4; const above = ranking[position - 2]; const movement = movements[person.id]; const gap = above ? Math.max(above.registrations - person.registrations, 0) : 0; return <RankingLine key={person.id} person={person} position={position} movement={movement} gap={gap} tied={Boolean(above && above.registrations === person.registrations)}/>; })}</section>}
       </div>
     </section> : <section className="scoreboard-empty-screen"><div className="score-empty"><Trophy size={48}/><h2>{compatibility ? 'A competição vai começar' : 'Placar ainda não publicado'}</h2><p>{compatibility ? 'As primeiras inscrições aparecerão aqui.' : 'A gestão ainda não publicou resultados para esta campanha.'}</p></div></section>}
     <footer className="score-ticker"><span className="live-dot"/><strong>Atualização automática a cada 15s</strong><p>{ranking[0] ? `${ranking[0].name} lidera com ${ranking[0].registrations} inscrições.` : data.published ? 'Nenhum participante pontuou nesta publicação.' : 'Aguardando publicação da gestão.'}</p><span>{data.version ? `Versão publicada ${data.version}` : compatibility ? 'Modo compatibilidade' : 'Sem publicação'}</span></footer>
@@ -476,13 +492,13 @@ function PodiumCard({ person, position, movement, tied }: { person: RankingRow; 
   return <article className={`podium-card podium-place-${position} ${movement?.direction && movement.direction !== 'same' ? `movement-${movement.direction}` : ''}`}>
     <div className="podium-rank"><span>{position}º</span>{isLeader ? <Crown size={18}/> : null}</div>
     <Avatar name={person.name} url={person.avatarUrl}/><h3>{person.name}</h3>{isLeader && <span className="leader-tag">Líder</span>}{tied && <span className="podium-tie">Empate</span>}
-    <AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/><span className="podium-caption">inscrições</span>
+    <AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/><span className="podium-caption">{person.noteCount || 0} notas</span>
   </article>;
 }
 
 function RankingLine({ person, position, movement, gap, tied }: { person: RankingRow; position: number; movement?: ScoreMovement; gap: number; tied: boolean }) {
   const label = movement?.direction === 'up' ? `Subiu ${movement.delta} ${movement.delta === 1 ? 'posição' : 'posições'}` : movement?.direction === 'down' ? `Caiu ${Math.abs(movement.delta)} ${Math.abs(movement.delta) === 1 ? 'posição' : 'posições'}` : tied ? 'Empate' : gap > 0 ? `Faltam ${gap} para subir` : 'Manteve';
-  return <article className={`score-rank-row movement-${movement?.direction || 'same'}`}><strong className="rank-number">{position}º</strong><div className="rank-person"><Avatar name={person.name} url={person.avatarUrl}/><strong>{person.name}</strong></div><strong className="rank-score"><AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/></strong><span className={`rank-movement ${movement?.direction || 'same'}`}>{movement?.direction === 'up' ? <ArrowUp size={14}/> : movement?.direction === 'down' ? <ArrowDown size={14}/> : <Minus size={14}/>} {label}</span></article>;
+  return <article className={`score-rank-row movement-${movement?.direction || 'same'}`}><strong className="rank-number">{position}º</strong><div className="rank-person"><Avatar name={person.name} url={person.avatarUrl}/><strong>{person.name}</strong></div><strong className="rank-score"><AnimatedCount value={person.registrations} from={movement?.previousRegistrations}/></strong><strong className="rank-notes">{person.noteCount || 0}</strong><span className={`rank-movement ${movement?.direction || 'same'}`}>{movement?.direction === 'up' ? <ArrowUp size={14}/> : movement?.direction === 'down' ? <ArrowDown size={14}/> : <Minus size={14}/>} {label}</span></article>;
 }
 
 function AnimatedCount({ value, from }: { value: number; from?: number }) {

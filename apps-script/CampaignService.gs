@@ -190,25 +190,29 @@ function getCampaign_(input) {
 }
 
 function scoreboard_() {
+  ensureEmploymentNotesSheet_();
   var active = currentCampaign_();
-  if (!active) return { campaign: null, ranking: [], version: 0, publishedAt: '', published: false };
+  if (!active) return { campaign: null, ranking: [], version: 0, publishedAt: '', published: false, totalNotes: 0 };
   var campaignId = text_(active.ID);
   var publishedRows = latestPublishedRows_(campaignId);
   var version = publishedRows.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, number_(active.VERSAO_PUBLICADA));
   return {
     campaign: campaignPayload_(active),
-    ranking: publishedRows.map(function (row) { return { id: text_(row.PARTICIPANTE_ID), name: text_(row.NOME), avatarUrl: text_(row.AVATAR_URL), registrations: number_(row.INSCRICOES) }; }),
+    ranking: publishedRows.map(function (row) { return { id: text_(row.PARTICIPANTE_ID), name: text_(row.NOME), avatarUrl: text_(row.AVATAR_URL), registrations: number_(row.INSCRICOES), noteCount: number_(row.NOTAS_EMPENHO) }; }),
     version: version,
     publishedAt: publishedRows.length ? dateText_(publishedRows[0].PUBLICADO_EM) : '',
-    published: publishedRows.length > 0
+    published: publishedRows.length > 0,
+    totalNotes: publishedRows.reduce(function (max, row) { return Math.max(max, number_(row.TOTAL_NOTAS_EMPENHO)); }, 0)
   };
 }
 
 function startNewCampaign_(input) {
+  ensureEmploymentNotesSheet_();
+  ensurePublishedNoteColumns_();
   var values = validateCampaignInput_(input);
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
-  var names = ['GINCANAS', 'GINCANA_PARTICIPANTES', 'GINCANA_PRODUTOS', 'LANCAMENTOS', 'PLACAR_PUBLICADO', 'PUBLICACOES'];
+  var names = ['GINCANAS', 'GINCANA_PARTICIPANTES', 'GINCANA_PRODUTOS', 'LANCAMENTOS', 'NOTAS_EMPENHO', 'PLACAR_PUBLICADO', 'PUBLICACOES'];
   var backups = names.reduce(function (result, name) { result[name] = captureSheet_(name); return result; }, {});
   var now = new Date();
   try {
@@ -226,6 +230,8 @@ function startNewCampaign_(input) {
         previous = rows_('GINCANAS').find(function (row) { return text_(row.ID) === archiveId; });
       }
       var ranking = rankingForLaunches_(previousLaunches);
+      var noteTotals = employmentNoteTotals_(archiveId);
+      ranking = ranking.map(function (person) { return Object.assign({}, person, { noteCount: noteTotals.byParticipant[person.id] || 0, totalNotes: noteTotals.total }); });
       var existingSnapshot = rows_('PLACAR_PUBLICADO').filter(function (row) { return text_(row.GINCANA_ID) === archiveId; });
       var version = existingSnapshot.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, number_(previous && previous.VERSAO_PUBLICADA));
       version = version || 1;
@@ -236,6 +242,9 @@ function startNewCampaign_(input) {
       });
       previousLaunches.forEach(function (launch) {
         if (!text_(launch.GINCANA_ID)) updateObjectById_('LANCAMENTOS', text_(launch.ID), { GINCANA_ID: archiveId });
+      });
+      rows_('NOTAS_EMPENHO').filter(function (note) { return text_(note.GINCANA_ID) === archiveId && !text_(note.PUBLICADO_NA_VERSAO); }).forEach(function (note) {
+        updateObjectById_('NOTAS_EMPENHO', text_(note.ID), { PUBLICADO_NA_VERSAO: version });
       });
       updateObjectById_('GINCANAS', archiveId, { STATUS: 'ARQUIVADA', VERSAO_PUBLICADA: version, ATUALIZADO_EM: now });
       archive = { campaign: campaignPayload_(rows_('GINCANAS').find(function (row) { return text_(row.ID) === archiveId; })), ranking: ranking };
@@ -314,7 +323,7 @@ function isActiveParticipantId_(participantById, id) {
 
 function publishedRanking_(campaignId) {
   return latestPublishedRows_(campaignId).map(function (row) {
-    return { id: text_(row.PARTICIPANTE_ID), name: text_(row.NOME), team: text_(row.EQUIPE), registrations: number_(row.INSCRICOES) };
+    return { id: text_(row.PARTICIPANTE_ID), name: text_(row.NOME), team: text_(row.EQUIPE), registrations: number_(row.INSCRICOES), noteCount: number_(row.NOTAS_EMPENHO) };
   });
 }
 
