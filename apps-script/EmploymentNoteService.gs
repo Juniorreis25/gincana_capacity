@@ -126,11 +126,8 @@ function deleteEmploymentNote_(input) {
   lock.waitLock(10000);
   try {
     var now = new Date();
-    markEmploymentNoteDeleted_(id, now);
+    markEmploymentNotesDeleted_([id], now);
     SpreadsheetApp.flush();
-    if (rows_('NOTAS_EMPENHO').some(function (row) { return text_(row.ID) === id && text_(row.STATUS).toUpperCase() !== 'EXCLUIDO'; })) {
-      throw new Error('EMPLOYMENT_NOTE_DELETE_FAILED: A planilha não confirmou a exclusão da nota.');
-    }
     syncPublishedNoteTotals_(campaign.ID);
     appendObject_('AUDITORIA', { ID: Utilities.getUuid(), ACAO: 'EXCLUIR_NOTA_EMPENHO', ENTIDADE: 'NOTA_EMPENHO', ENTIDADE_ID: id, ANTES_JSON: JSON.stringify(current), DEPOIS_JSON: JSON.stringify({ STATUS: 'EXCLUIDO' }), USUARIO: 'painel.supervisora', DATA_HORA: now });
     SpreadsheetApp.flush();
@@ -155,15 +152,12 @@ function deleteEmploymentNotesForParticipant_(input) {
   lock.waitLock(10000);
   try {
     var now = new Date();
+    var ids = current.map(function (row) { return text_(row.ID); });
+    markEmploymentNotesDeleted_(ids, now);
     current.forEach(function (row) {
-      markEmploymentNoteDeleted_(text_(row.ID), now);
       appendObject_('AUDITORIA', { ID: Utilities.getUuid(), ACAO: 'EXCLUIR_NOTA_EMPENHO', ENTIDADE: 'NOTA_EMPENHO', ENTIDADE_ID: text_(row.ID), ANTES_JSON: JSON.stringify(row), DEPOIS_JSON: JSON.stringify({ STATUS: 'EXCLUIDO' }), USUARIO: 'painel.supervisora', DATA_HORA: now });
     });
     SpreadsheetApp.flush();
-    var deletedIds = current.reduce(function (result, row) { result[text_(row.ID)] = true; return result; }, {});
-    if (rows_('NOTAS_EMPENHO').some(function (row) { return deletedIds[text_(row.ID)] && text_(row.STATUS).toUpperCase() !== 'EXCLUIDO'; })) {
-      throw new Error('EMPLOYMENT_NOTE_DELETE_FAILED: A planilha não confirmou a exclusão das notas.');
-    }
     syncPublishedNoteTotals_(campaign.ID);
     SpreadsheetApp.flush();
     var result = bootstrap_();
@@ -175,22 +169,48 @@ function deleteEmploymentNotesForParticipant_(input) {
 }
 
 function markEmploymentNoteDeleted_(id, updatedAt) {
+  return markEmploymentNotesDeleted_([id], updatedAt);
+}
+
+function markEmploymentNotesDeleted_(ids, updatedAt) {
   var sheet = ensureEmploymentNotesSheet_();
-  var values = sheet.getDataRange().getValues();
-  if (!values.length) throw new Error('RECORD_NOT_FOUND: Nota de empenho não encontrada.');
+  var range = sheet.getDataRange();
+  var values = range.getValues();
+  if (!values.length || values.length < 2) throw new Error('RECORD_NOT_FOUND: Nota de empenho não encontrada.');
   var headers = values[0].map(function (value) { return text_(value); });
-  var idColumn = headers.indexOf('ID') + 1;
-  var statusColumn = headers.indexOf('STATUS') + 1;
-  var updatedColumn = headers.indexOf('ATUALIZADO_EM') + 1;
-  if (!idColumn || !statusColumn) throw new Error('EMPLOYMENT_NOTE_SCHEMA_INVALID: A aba de notas não possui as colunas ID e STATUS.');
+  var idIndex = headers.indexOf('ID');
+  var statusIndex = headers.indexOf('STATUS');
+  var updatedIndex = headers.indexOf('ATUALIZADO_EM');
+  if (idIndex < 0 || statusIndex < 0) throw new Error('EMPLOYMENT_NOTE_SCHEMA_INVALID: A aba de notas não possui as colunas ID e STATUS.');
+  var requested = ids.reduce(function (result, id) { result[text_(id)] = true; return result; }, {});
+  var found = {};
+  var statusValues = values.slice(1).map(function (row) { return [row[statusIndex] || '']; });
+  var updatedValues = updatedIndex >= 0 ? values.slice(1).map(function (row) { return [row[updatedIndex] || '']; }) : null;
   for (var index = 1; index < values.length; index += 1) {
-    if (text_(values[index][idColumn - 1]) !== text_(id)) continue;
-    var rowNumber = index + 1;
-    sheet.getRange(rowNumber, statusColumn).setValue('EXCLUIDO');
-    if (updatedColumn) sheet.getRange(rowNumber, updatedColumn).setValue(updatedAt);
-    return true;
+    var rowId = text_(values[index][idIndex]);
+    if (!requested[rowId]) continue;
+    statusValues[index - 1][0] = 'EXCLUIDO';
+    if (updatedValues) updatedValues[index - 1][0] = updatedAt;
+    found[rowId] = true;
   }
-  throw new Error('RECORD_NOT_FOUND: Nota de empenho não encontrada.');
+  var missing = Object.keys(requested).filter(function (id) { return !found[id]; });
+  if (missing.length) throw new Error('RECORD_NOT_FOUND: Nota de empenho não encontrada.');
+
+  sheet.getRange(2, statusIndex + 1, statusValues.length, 1).setValues(statusValues);
+  if (updatedValues) sheet.getRange(2, updatedIndex + 1, updatedValues.length, 1).setValues(updatedValues);
+  SpreadsheetApp.flush();
+
+  var idsByRow = sheet.getRange(2, idIndex + 1, values.length - 1, 1).getValues();
+  var statusesByRow = sheet.getRange(2, statusIndex + 1, values.length - 1, 1).getValues();
+  var confirmed = {};
+  for (var rowIndex = 0; rowIndex < idsByRow.length; rowIndex += 1) {
+    var confirmedId = text_(idsByRow[rowIndex][0]);
+    if (requested[confirmedId] && text_(statusesByRow[rowIndex][0]).toUpperCase() === 'EXCLUIDO') confirmed[confirmedId] = true;
+  }
+  if (Object.keys(requested).some(function (id) { return !confirmed[id]; })) {
+    throw new Error('EMPLOYMENT_NOTE_DELETE_FAILED: A planilha não confirmou a exclusão das notas.');
+  }
+  return true;
 }
 
 function syncPublishedNoteTotals_(campaignId) {
