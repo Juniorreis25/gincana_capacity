@@ -194,6 +194,7 @@ function scoreboard_() {
   var active = currentCampaign_();
   if (!active) return { campaign: null, ranking: [], version: 0, publishedAt: '', published: false, totalNotes: 0 };
   var campaignId = text_(active.ID);
+  syncPublishedNoteTotals_(campaignId);
   var publishedRows = latestPublishedRows_(campaignId);
   var version = publishedRows.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, number_(active.VERSAO_PUBLICADA));
   return {

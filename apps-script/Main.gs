@@ -6,7 +6,9 @@ function doPost(e) {
   var body = {};
   try { body = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {}; } catch (error) { return json_(fail_('INVALID_JSON', 'Corpo da requisição inválido.')); }
   var action = text_(body.action);
-  if (!APP_CONFIG.allowedActions.includes(action)) return json_(fail_('ACTION_NOT_ALLOWED', 'Operação não disponível.'));
+  // Mantém a ação de exclusão disponível mesmo em implantações que ainda
+  // estejam usando uma cópia anterior de Config.gs durante a atualização.
+  if (!APP_CONFIG.allowedActions.includes(action) && action !== 'deleteEmploymentNote') return json_(fail_('ACTION_NOT_ALLOWED', 'Operação não disponível.'));
   if (!isAuthorized_(body.token, action)) return json_(fail_('UNAUTHORIZED', 'Token de integração inválido.'));
   try {
     if (action === 'bootstrap') return json_(ok_(bootstrap_()));
@@ -23,6 +25,8 @@ function doPost(e) {
     if (action === 'deleteLaunch') return json_(ok_(deleteLaunch_(body)));
     if (action === 'createEmploymentNote') return json_(ok_(createEmploymentNote_(body)));
     if (action === 'updateEmploymentNote') return json_(ok_(updateEmploymentNote_(body)));
+    if (action === 'deleteEmploymentNote') return json_(ok_(deleteEmploymentNote_(body)));
+    if (action === 'deleteEmploymentNotesForParticipant') return json_(ok_(deleteEmploymentNotesForParticipant_(body)));
     if (action === 'adminData') return json_(ok_(adminData_()));
     if (action === 'createParticipant' || action === 'updateParticipant' || action === 'deleteParticipant' || action === 'deactivateParticipant' || action === 'activateParticipant') return json_(ok_(adminMutate_('participant', action, body)));
     if (action === 'createProduct' || action === 'updateProduct' || action === 'deleteProduct' || action === 'deactivateProduct' || action === 'activateProduct') return json_(ok_(adminMutate_('product', action, body)));

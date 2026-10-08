@@ -11,7 +11,7 @@ Este diretório contém o backend JSON do MVP. O Site privado é o frontend ofic
 
 ## Operações ativas
 
-`bootstrap`, `scoreboard`, `preview`, `publish`, `adminData`, `listCampaigns`, `getCampaign`, `getCampaignAssociations`, `updateCampaignAssociations`, `startNewCampaign`, `createLaunch`, `updateLaunch`, `deleteLaunch`, `createEmploymentNote`, `updateEmploymentNote` e o CRUD/ativação de participantes e produtos.
+`bootstrap`, `scoreboard`, `preview`, `publish`, `adminData`, `listCampaigns`, `getCampaign`, `getCampaignAssociations`, `updateCampaignAssociations`, `startNewCampaign`, `createLaunch`, `updateLaunch`, `deleteLaunch`, `createEmploymentNote`, `updateEmploymentNote`, `deleteEmploymentNote`, `deleteEmploymentNotesForParticipant` e o CRUD/ativação de participantes e produtos.
 
 O Site usa `bootstrap` para a gestão e `scoreboard` para a TV. A TV lê somente
 `PLACAR_PUBLICADO`, nunca os lançamentos pendentes, e mostra a versão e a data
@@ -25,7 +25,7 @@ auditoria. A TV só muda depois dessa confirmação.
 As notas de empenho usam a aba dedicada `NOTAS_EMPENHO`, criada
 automaticamente na primeira operação da versão que suporta o recurso. Seus
 campos são `ID`, `GINCANA_ID`, `PARTICIPANTE_ID`, `PRODUTO_ID`, `DATA`,
-`QUANTIDADE`, `PUBLICADO_NA_VERSAO`, `CRIADO_EM` e `ATUALIZADO_EM`. A soma é
+`QUANTIDADE`, `PUBLICADO_NA_VERSAO`, `STATUS`, `CRIADO_EM` e `ATUALIZADO_EM`. Registros com status `EXCLUIDO` ou quantidade zero não aparecem na operação financeira. A soma é
 feita por participante no Apps Script, somente com registros de participantes,
 produtos e associações ativos. O snapshot publicado acrescenta
 `NOTAS_EMPENHO` e `TOTAL_NOTAS_EMPENHO` à aba `PLACAR_PUBLICADO`, permitindo que

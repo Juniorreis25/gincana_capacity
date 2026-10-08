@@ -11,12 +11,11 @@ function publish_() {
     var gameId = text_(active.ID);
     var launches = rows_('LANCAMENTOS');
     var pending = launches.filter(function (launch) { return text_(launch.GINCANA_ID) === gameId && text_(launch.STATUS).toUpperCase() === 'ATIVO' && !text_(launch.PUBLICADO_NA_VERSAO); });
-    var pendingNotes = rows_('NOTAS_EMPENHO').filter(function (note) { return text_(note.GINCANA_ID) === gameId && !text_(note.PUBLICADO_NA_VERSAO); });
-    if (!pending.length && !pendingNotes.length) throw new Error('NOTHING_TO_PUBLISH: Não existem alterações pendentes de publicação.');
+    if (!pending.length) throw new Error('NOTHING_TO_PUBLISH: Não existem alterações pendentes de publicação.');
     var ranking = rankingForGame_(gameId);
     var noteTotals = employmentNoteTotals_(gameId);
     ranking = ranking.map(function (person) { return Object.assign({}, person, { noteCount: noteTotals.byParticipant[person.id] || 0, totalNotes: noteTotals.total }); });
-    if (!ranking.length && !pendingNotes.length) throw new Error('EMPTY_PUBLICATION: Não foi possível gerar um ranking vazio.');
+    if (!ranking.length) throw new Error('EMPTY_PUBLICATION: Não foi possível gerar um ranking vazio.');
     var existing = rows_('PLACAR_PUBLICADO').filter(function (row) { return text_(row.GINCANA_ID) === gameId; });
     var currentVersion = existing.reduce(function (max, row) { return Math.max(max, number_(row.VERSAO)); }, number_(active.VERSAO_PUBLICADA));
     var version = currentVersion + 1;
@@ -27,11 +26,10 @@ function publish_() {
       QUANTIDADE_LANCAMENTOS: pending.length, RESUMO_JSON: JSON.stringify({ total: ranking.reduce(function (sum, row) { return sum + row.registrations; }, 0), participantes: ranking.length, totalNotas: noteTotals.total }), OBSERVACAO: ''
     });
     pending.forEach(function (launch) { updateObjectById_('LANCAMENTOS', text_(launch.ID), { PUBLICADO_NA_VERSAO: version }); });
-    pendingNotes.forEach(function (note) { updateObjectById_('NOTAS_EMPENHO', text_(note.ID), { PUBLICADO_NA_VERSAO: version }); });
     updateObjectById_('GINCANAS', gameId, { VERSAO_PUBLICADA: version, ATUALIZADO_EM: now });
     appendObject_('AUDITORIA', {
       ID: Utilities.getUuid(), ACAO: 'PUBLICAR', ENTIDADE: 'PLACAR', ENTIDADE_ID: gameId, ANTES_JSON: JSON.stringify({ versao: currentVersion }),
-      DEPOIS_JSON: JSON.stringify({ versao: version, lancamentos: pending.length, notasEmpenho: pendingNotes.length }), USUARIO: 'painel.supervisora', DATA_HORA: now
+      DEPOIS_JSON: JSON.stringify({ versao: version, lancamentos: pending.length }), USUARIO: 'painel.supervisora', DATA_HORA: now
     });
     return { version: version, bootstrap: bootstrap_() };
   } catch (error) {

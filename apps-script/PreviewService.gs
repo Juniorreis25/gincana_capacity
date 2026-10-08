@@ -25,7 +25,7 @@ function preview_() {
     game: { id: gameId, name: text_(active.NOME) },
     currentTotal: current.reduce(function (sum, row) { return sum + row.registrations; }, 0),
     publishedTotal: published ? published.total : 0,
-    pendingCount: rows_('LANCAMENTOS').filter(function (launch) { return text_(launch.GINCANA_ID) === gameId && text_(launch.STATUS).toUpperCase() === 'ATIVO' && !text_(launch.PUBLICADO_NA_VERSAO); }).length + rows_('NOTAS_EMPENHO').filter(function (note) { return text_(note.GINCANA_ID) === gameId && !text_(note.PUBLICADO_NA_VERSAO); }).length,
+    pendingCount: rows_('LANCAMENTOS').filter(function (launch) { return text_(launch.GINCANA_ID) === gameId && text_(launch.STATUS).toUpperCase() === 'ATIVO' && !text_(launch.PUBLICADO_NA_VERSAO); }).length,
     publishedVersion: published ? published.version : 0,
     newLeader: current.length ? current[0].name : '',
     leaderChanged: Boolean(current.length && (!published || !published.ranking.length || current[0].id !== published.ranking[0].id)),
