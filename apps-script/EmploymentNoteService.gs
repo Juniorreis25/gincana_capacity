@@ -126,8 +126,11 @@ function deleteEmploymentNote_(input) {
   lock.waitLock(10000);
   try {
     var now = new Date();
-    markEmploymentNotesDeleted_([id], now);
+    markEmploymentNoteDeleted_(id, now);
     SpreadsheetApp.flush();
+    if (rows_('NOTAS_EMPENHO').some(function (row) { return text_(row.ID) === id && text_(row.STATUS).toUpperCase() !== 'EXCLUIDO'; })) {
+      throw new Error('EMPLOYMENT_NOTE_DELETE_FAILED: A planilha não confirmou a exclusão da nota.');
+    }
     syncPublishedNoteTotals_(campaign.ID);
     appendObject_('AUDITORIA', { ID: Utilities.getUuid(), ACAO: 'EXCLUIR_NOTA_EMPENHO', ENTIDADE: 'NOTA_EMPENHO', ENTIDADE_ID: id, ANTES_JSON: JSON.stringify(current), DEPOIS_JSON: JSON.stringify({ STATUS: 'EXCLUIDO' }), USUARIO: 'painel.supervisora', DATA_HORA: now });
     SpreadsheetApp.flush();
@@ -252,5 +255,6 @@ function syncPublishedNoteTotals_(campaignId) {
     }
   }
   if (changed) range.setValues(values);
+  SpreadsheetApp.flush();
   return version;
 }
