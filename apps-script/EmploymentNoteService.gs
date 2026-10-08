@@ -205,8 +205,12 @@ function syncPublishedNoteTotals_(campaignId) {
   var campaignIndex = headers.indexOf('GINCANA_ID');
   var versionIndex = headers.indexOf('VERSAO');
   var participantIndex = headers.indexOf('PARTICIPANTE_ID');
-  var noteIndex = headers.indexOf('NOTAS_EMPENHO');
-  var totalIndex = headers.indexOf('TOTAL_NOTAS_EMPENHO');
+  var noteIndexes = [];
+  var totalIndexes = [];
+  headers.forEach(function (header, index) {
+    if (header === 'NOTAS_EMPENHO') noteIndexes.push(index);
+    if (header === 'TOTAL_NOTAS_EMPENHO') totalIndexes.push(index);
+  });
   var publishedAtIndex = headers.indexOf('PUBLICADO_EM');
   var version = number_(publishedRows[0].VERSAO);
   var changed = false;
@@ -214,8 +218,12 @@ function syncPublishedNoteTotals_(campaignId) {
     if (text_(values[rowIndex][campaignIndex]) !== text_(campaignId) || number_(values[rowIndex][versionIndex]) !== version) continue;
     var participantId = text_(values[rowIndex][participantIndex]);
     var noteCount = totals.byParticipant[participantId] || 0;
-    if (noteIndex >= 0 && number_(values[rowIndex][noteIndex]) !== noteCount) { values[rowIndex][noteIndex] = noteCount; changed = true; }
-    if (totalIndex >= 0 && number_(values[rowIndex][totalIndex]) !== totals.total) { values[rowIndex][totalIndex] = totals.total; changed = true; }
+    noteIndexes.forEach(function (index) {
+      if (number_(values[rowIndex][index]) !== noteCount) { values[rowIndex][index] = noteCount; changed = true; }
+    });
+    totalIndexes.forEach(function (index) {
+      if (number_(values[rowIndex][index]) !== totals.total) { values[rowIndex][index] = totals.total; changed = true; }
+    });
   }
   if (changed && publishedAtIndex >= 0) {
     var now = new Date();
