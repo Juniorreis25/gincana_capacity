@@ -220,7 +220,7 @@ export default function Home() {
       <section className="main-panel">
         <header className="topbar">
           <div><div className="topbar-kicker"><p className="eyebrow">Gestão comercial</p><ConnectionBadge mode={mode} hasData={adminData.participants.length + adminData.products.length > 0} campaignApiReady={bootstrap.campaign !== undefined || Boolean(localPreviewCampaign)} /></div><h1>{pageTitles[page]}</h1></div>
-          <div className="topbar-actions"><Button variant="outline" className="rounded-full" onClick={openScoreboard}><Eye size={17}/> Ver placar da TV</Button><Button variant="outline" className="rounded-full" disabled={mode !== 'live'} onClick={openNewCampaign}><CalendarDays size={17}/> Nova campanha</Button><Button className="primary-action rounded-full" disabled={mode !== 'live'} onClick={openNewEnrollment}><Plus size={18}/> Registrar inscrição</Button></div>
+          <div className="topbar-actions"><Button variant="outline" className="rounded-full" onClick={openScoreboard}><Eye size={17}/> Ver placar da TV</Button><Button variant="outline" className="rounded-full" disabled={mode !== 'live'} onClick={openNewCampaign}><CalendarDays size={17}/> Nova campanha</Button><Button className="primary-action rounded-full" disabled={mode !== 'live'} onClick={openNewEmploymentNote}><FileText size={17}/> Registrar nota</Button><Button className="primary-action rounded-full" disabled={mode !== 'live'} onClick={openNewEnrollment}><Plus size={18}/> Registrar inscrição</Button></div>
         </header>
         <div className="content-wrap">
           {message && <p className={messageIsError ? 'success-banner error' : 'success-banner'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
