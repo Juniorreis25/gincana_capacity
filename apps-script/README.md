@@ -31,6 +31,13 @@ produtos e associações ativos. O snapshot publicado acrescenta
 `NOTAS_EMPENHO` e `TOTAL_NOTAS_EMPENHO` à aba `PLACAR_PUBLICADO`, permitindo que
 a TV continue consumindo apenas a camada publicada.
 
+Na planilha oficial, uma duplicação histórica do cabeçalho `STATUS` foi
+corrigida em 09/10/2026: a coluna J passou a se chamar `STATUS_LEGADO` e a
+coluna K é o único `STATUS` operacional. Não renomeie J novamente para
+`STATUS`; leituras e exclusões devem usar K. A exclusão em lote confirma a
+gravação no Apps Script e o frontend consulta `bootstrap` em uma chamada
+separada para verificar que as notas desapareceram.
+
 As associações da campanha são salvas em uma operação protegida. Somente
 participantes e produtos ativos e associados à campanha atual podem receber
 novos lançamentos ou aparecer no ranking. A atualização das duas abas de

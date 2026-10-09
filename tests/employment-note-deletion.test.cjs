@@ -34,4 +34,8 @@ assert.deepEqual(values.slice(1).map((row) => row.slice(9, 11)), [
   ['ATIVO', 'ATIVO'],
 ]);
 assert.throws(() => context.markEmploymentNotesDeleted_(['missing'], new Date()), /RECORD_NOT_FOUND/);
+values[0][9] = 'STATUS_LEGADO';
+values[2][10] = 'ATIVO';
+assert.equal(context.markEmploymentNotesDeleted_(['target'], new Date()), true);
+assert.equal(values[2][10], 'EXCLUIDO');
 console.log('Duplicate STATUS columns: authoritative last column updated and confirmed');
