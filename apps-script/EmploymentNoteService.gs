@@ -161,13 +161,7 @@ function deleteEmploymentNotesForParticipant_(input) {
       appendObject_('AUDITORIA', { ID: Utilities.getUuid(), ACAO: 'EXCLUIR_NOTA_EMPENHO', ENTIDADE: 'NOTA_EMPENHO', ENTIDADE_ID: text_(row.ID), ANTES_JSON: JSON.stringify(row), DEPOIS_JSON: JSON.stringify({ STATUS: 'EXCLUIDO' }), USUARIO: 'painel.supervisora', DATA_HORA: now });
     });
     SpreadsheetApp.flush();
-    syncPublishedNoteTotals_(campaign.ID);
-    SpreadsheetApp.flush();
-    var result = bootstrap_();
-    if ((result.employmentNotes || []).some(function (row) { return row.participantId === participantId; })) {
-      throw new Error('EMPLOYMENT_NOTE_DELETE_FAILED: Ainda existem notas ativas do participante após a exclusão.');
-    }
-    return result;
+    return { participantId: participantId, deletedCount: current.length };
   } finally { lock.releaseLock(); }
 }
 
@@ -182,7 +176,8 @@ function markEmploymentNotesDeleted_(ids, updatedAt) {
   if (!values.length || values.length < 2) throw new Error('RECORD_NOT_FOUND: Nota de empenho não encontrada.');
   var headers = values[0].map(function (value) { return text_(value); });
   var idIndex = headers.indexOf('ID');
-  var statusIndex = headers.indexOf('STATUS');
+  // rows_() keeps the last value when a legacy sheet has duplicate headers.
+  var statusIndex = headers.lastIndexOf('STATUS');
   var updatedIndex = headers.indexOf('ATUALIZADO_EM');
   if (idIndex < 0 || statusIndex < 0) throw new Error('EMPLOYMENT_NOTE_SCHEMA_INVALID: A aba de notas não possui as colunas ID e STATUS.');
   var requested = ids.reduce(function (result, id) { result[text_(id)] = true; return result; }, {});

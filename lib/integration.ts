@@ -190,21 +190,21 @@ export function deleteEmploymentNote(id: string): Promise<BootstrapData> {
 
 export async function deleteEmploymentNotesForParticipant(participantId: string, noteIds: string[] = []): Promise<BootstrapData> {
   try {
-    const result = await postAction<BootstrapData>({ action: 'deleteEmploymentNotesForParticipant', participantId }, 'Não foi possível excluir as notas de empenho do participante.');
-    if ((result.employmentNotes || []).some((note) => note.participantId === participantId && note.quantity > 0)) {
-      throw new Error('O servidor informou sucesso, mas as notas ainda aparecem ativas. Atualize o Apps Script e tente novamente.');
-    }
-    return result;
+    await postAction<{ participantId: string; deletedCount: number }>({ action: 'deleteEmploymentNotesForParticipant', participantId }, 'Não foi possível excluir as notas de empenho do participante.');
   } catch (error) {
     const code = (error as Error & { code?: string }).code;
-    if (code !== 'ACTION_NOT_ALLOWED' || !noteIds.length) throw error;
-    for (const id of noteIds) await deleteEmploymentNote(id);
-    const refreshed = await loadBootstrap();
-    if ((refreshed.employmentNotes || []).some((note) => note.participantId === participantId && note.quantity > 0)) {
-      throw new Error('A exclusão não foi confirmada pela planilha. Atualize o Apps Script antes de repetir a operação.');
+    if (code === 'ACTION_NOT_ALLOWED' && noteIds.length) {
+      for (const id of noteIds) await deleteEmploymentNote(id);
+    } else if (code !== 'INVALID_UPSTREAM_RESPONSE' && code !== 'RECORD_NOT_FOUND') {
+      throw error;
     }
-    return refreshed;
   }
+  // Confirm against persisted data, including after an ambiguous gateway error.
+  const refreshed = await loadBootstrap();
+  if ((refreshed.employmentNotes || []).some((note) => note.participantId === participantId && note.quantity > 0)) {
+    throw new Error('A exclusão não foi confirmada pela planilha. Tente novamente.');
+  }
+  return refreshed;
 }
 
 export function updateLaunch(input: { id: string; participantId: string; productId: string; quantity: number; date: string; notes?: string }): Promise<BootstrapData> {
